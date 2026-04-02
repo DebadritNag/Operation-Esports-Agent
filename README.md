@@ -21,7 +21,20 @@ Health: https://Debadrit-esports-tournament-env.hf.space/health
 
 ## Overview
 
-The agent acts as an automated Tournament Admin API that receives alerts about tournament state and must issue precise JSON commands to manage brackets, reallocate servers, and handle prize pools.
+### Why This Project
+
+Esports tournaments are real operational infrastructure. A major event like ESL One or The International runs on live server allocation, dynamic bracket management, and prize pool contracts — all of which must be updated in real time, often under pressure, with zero tolerance for errors. A wrong bracket update or an incorrect prize distribution isn't a cosmetic bug; it affects team standings, contracts, and payouts worth thousands of dollars.
+
+This environment models that operational reality. The agent acts as an automated Tournament Admin API — it receives live alerts about match conclusions, server conflicts, and team withdrawals, and must respond with precise, structured JSON commands. There is no room for approximation: the grader checks exact state matches, not fuzzy intent.
+
+This is not a game or a toy because:
+
+- The decision space mirrors real backend ops tooling used by tournament organizers
+- Actions have cascading consequences (a wrong server reallocation double-books infrastructure; a wrong prize split fails financial reconciliation)
+- The hard task requires multi-step reasoning: parse a dropout alert, identify the forfeit winner, zero one account, and redistribute funds with correct arithmetic — all in a single atomic action
+- The reward function is strict: partial credit only where operationally meaningful, full credit only on exact correctness
+
+The goal is to test whether an LLM agent can reliably operate as a backend automation layer in a high-stakes, time-sensitive domain — not whether it can play a game.
 
 Three progressively challenging tasks:
 
