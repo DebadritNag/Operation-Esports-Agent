@@ -1,0 +1,14 @@
+{
+  "current_time": "15:30:00",
+  "active_alerts": ["URGENT: Match M2 is in triple overtime on server 'eu-west-1'. Match M3 is scheduled to start on 'eu-west-1' in 5 minutes. Reallocate Match M3 to an available server and broadcast a delay message."],
+  "bracket_state": {
+    "M2": "in_progress",
+    "M3": "pending"
+  },
+  "server_availability": {
+    "eu-west-1": false,
+    "eu-west-2": true,
+    "eu-west-3": true
+  },
+  "prize_pool_status": {}
+}

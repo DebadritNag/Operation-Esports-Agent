@@ -1,0 +1,17 @@
+{
+  "current_time": "09:00:00",
+  "active_alerts": ["CRITICAL: 'Team_Liquid' has dropped out of the tournament due to illness. Their opponent in Match M4 was 'Team_Solid'. Mark Match M4 as a forfeit win for 'Team_Solid'. You must also completely zero out Team_Liquid's prize pool and distribute their $3000 evenly among the 3 remaining active teams (Team_Solid, Team_Spirit, Team_Falcon)."],
+  "bracket_state": {
+    "M4": "pending",
+    "M5": "pending"
+  },
+  "server_availability": {
+    "us-west-1": true
+  },
+  "prize_pool_status": {
+    "Team_Liquid": 3000.0,
+    "Team_Solid": 1000.0,
+    "Team_Spirit": 1000.0,
+    "Team_Falcon": 1000.0
+  }
+}

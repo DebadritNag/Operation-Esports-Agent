@@ -1,0 +1,211 @@
+"""
+Baseline inference script for the Esports Tournament Operations Manager environment.
+CRITICAL: This script follows strict STDOUT formatting rules for OpenEnv compliance.
+"""
+import os
+import json
+import requests
+import sys
+from typing import Dict, Any, List
+from openai import OpenAI
+
+
+class EsportsInferenceClient:
+    """Client for testing the esports tournament environment with LLM inference."""
+    
+    def __init__(self):
+        # Environment variables with exact names as specified
+        self.api_key = os.getenv("HF_TOKEN")
+        self.api_base_url = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+        self.model_name = os.getenv("MODEL_NAME", "meta-llama/Meta-Llama-3-8B-Instruct")
+        self.env_url = "http://localhost:8001"
+        
+        if not self.api_key:
+            raise ValueError("HF_TOKEN environment variable is required")
+        
+        # Initialize OpenAI client - simple and strict initialization
+        self.client = OpenAI(
+            base_url=self.api_base_url,
+            api_key=self.api_key
+        )
+        
+        # Task descriptions for the LLM
+        self.task_descriptions = {
+            "task_easy_bracket": """
+            You are managing an esports tournament bracket. You need to:
+            1. Read the match results from active_alerts
+            2. Determine the winners based on the alert message
+            3. Update the bracket_state with the correct winners
+            
+            The alert contains match results. Extract the winner and update only the matches that have results.
+            """,
+            
+            "task_medium_conflict": """
+            You are handling a server conflict during a tournament. You need to:
+            1. A match has gone into triple overtime causing server conflicts
+            2. Reallocate the conflicted match to an available server
+            3. Send a broadcast message to notify teams about the change
+            
+            Check server_availability to find available servers.
+            Use reallocate_servers to move matches and broadcast_message to notify.
+            """,
+            
+            "task_hard_dropout": """
+            You are handling a team dropout situation. You need to:
+            1. A team has dropped out due to illness
+            2. Award their current match to their opponent (forfeit)
+            3. Recalculate the prize pool by distributing the dropped team's allocation evenly among remaining teams
+            
+            Use update_matches to record the forfeit and adjust_prize_pool to redistribute money.
+            """
+        }
+    
+    def test_environment_health(self) -> bool:
+        """Test if the environment server is running."""
+        try:
+            response = requests.get(f"{self.env_url}/health", timeout=5)
+            return response.status_code == 200
+        except Exception:
+            return False
+    
+    def reset_task(self, task_id: str) -> Dict[str, Any]:
+        """Reset environment for a specific task."""
+        response = requests.post(f"{self.env_url}/reset?task_id={task_id}", timeout=10)
+        response.raise_for_status()
+        return response.json()
+    
+    def step_environment(self, action: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute an action in the environment."""
+        response = requests.post(
+            f"{self.env_url}/step",
+            json=action,
+            headers={"Content-Type": "application/json"},
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.json()
+    
+    def query_llm(self, observation: Dict[str, Any], task_description: str) -> Dict[str, Any]:
+        """Query the LLM for an action based on the observation."""
+        system_prompt = f"""You are an AI agent managing an esports tournament. {task_description}
+
+You must respond with a valid JSON object containing an action. The action can have these optional fields:
+- update_matches: dict mapping match_id to winner_id
+- reallocate_servers: dict mapping match_id to server_id  
+- broadcast_message: string message to broadcast
+- adjust_prize_pool: dict mapping team_id to new prize amount
+
+Only include fields that are relevant to the current task.
+
+Example response format:
+{{
+    "update_matches": {{"M1": "Team_Alpha"}},
+    "broadcast_message": "Match schedule updated due to server conflict"
+}}"""
+        
+        user_prompt = f"""Current tournament observation:
+{json.dumps(observation, indent=2)}
+
+Based on this observation and the active alerts, what action should be taken?
+Respond with only a JSON object containing the action."""
+        
+        response = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.1,
+            max_tokens=500
+        )
+        
+        action_text = response.choices[0].message.content.strip()
+        
+        # Try to extract JSON from the response
+        if action_text.startswith("```json"):
+            action_text = action_text.split("```json")[1].split("```")[0].strip()
+        elif action_text.startswith("```"):
+            action_text = action_text.split("```")[1].split("```")[0].strip()
+        
+        return json.loads(action_text)
+    
+    def run_task(self, task_id: str) -> None:
+        """Run a complete task episode with strict STDOUT formatting."""
+        # Line 1: [START] task=<task_id> env=esports_env model=<model_name>
+        print(f"[START] task={task_id} env=esports_env model={self.model_name}")
+        
+        try:
+            # Reset environment
+            observation = self.reset_task(task_id)
+            task_description = self.task_descriptions.get(task_id, "")
+            
+            max_steps = 10
+            step = 0
+            rewards: List[float] = []
+            success = False
+            
+            while step < max_steps:
+                step += 1
+                
+                try:
+                    # Query LLM for action
+                    action = self.query_llm(observation, task_description)
+                    
+                    # Convert action to JSON string with no newlines
+                    action_json_str = json.dumps(action, separators=(',', ':'))
+                    
+                    # Execute action
+                    step_response = self.step_environment(action)
+                    observation = step_response["observation"]
+                    reward = step_response["reward"]
+                    done = step_response["done"]
+                    
+                    rewards.append(reward)
+                    
+                    # Line 2: [STEP] step=<n> action=<action_json_string_no_newlines> reward=<0.00> done=<true|false> error=<msg|null>
+                    done_str = "true" if done else "false"
+                    print(f"[STEP] step={step} action={action_json_str} reward={reward:.2f} done={done_str} error=null")
+                    
+                    if done:
+                        success = reward >= 1.0
+                        break
+                        
+                except Exception as e:
+                    # LLM or environment error - log error and exit episode
+                    action_json_str = json.dumps({}, separators=(',', ':'))
+                    error_msg = str(e).replace('\n', ' ').replace('\r', ' ')
+                    print(f"[STEP] step={step} action={action_json_str} reward=0.00 done=true error={error_msg}")
+                    rewards.append(0.0)
+                    success = False
+                    break
+            
+            # Line 3: [END] success=<true|false> steps=<n> rewards=<r1,r2,...,rn>
+            success_str = "true" if success else "false"
+            rewards_str = ",".join([f"{r:.2f}" for r in rewards])
+            print(f"[END] success={success_str} steps={len(rewards)} rewards={rewards_str}")
+            
+        except Exception as e:
+            # Handle reset or other initialization errors
+            error_msg = str(e).replace('\n', ' ').replace('\r', ' ')
+            print(f"[STEP] step=1 action={{}} reward=0.00 done=true error={error_msg}")
+            print(f"[END] success=false steps=1 rewards=0.00")
+    
+    def run_all_tasks(self):
+        """Run all three tasks with strict STDOUT formatting."""
+        if not self.test_environment_health():
+            print("Environment server is not running. Please start it first.")
+            return
+        
+        tasks = ["task_easy_bracket", "task_medium_conflict", "task_hard_dropout"]
+        
+        for task_id in tasks:
+            self.run_task(task_id)
+
+
+if __name__ == "__main__":
+    try:
+        client = EsportsInferenceClient()
+        client.run_all_tasks()
+    except Exception as e:
+        print(f"Fatal error: {e}", file=sys.stderr)
+        sys.exit(1)

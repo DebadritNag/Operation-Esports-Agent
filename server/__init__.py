@@ -1,0 +1,1 @@
+# Server package for Esports Tournament Operations Manager

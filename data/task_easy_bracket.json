@@ -1,0 +1,13 @@
+{
+  "current_time": "14:00:00",
+  "active_alerts": ["Match M1 has concluded. 'Team_Alpha' defeated 'Team_Beta'. Please update the bracket state."],
+  "bracket_state": {
+    "M1": "pending",
+    "M2": "pending"
+  },
+  "server_availability": {
+    "us-east-1": true,
+    "us-east-2": true
+  },
+  "prize_pool_status": {}
+}

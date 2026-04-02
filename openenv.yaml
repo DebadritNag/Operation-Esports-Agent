@@ -1,0 +1,35 @@
+name: esports_env
+version: 1.0.0
+description: "Esports Tournament Operations Manager - An environment for managing tournament logistics, brackets, and operations"
+
+tasks:
+  - id: task_easy_bracket
+    name: "Match Processing"
+    description: "Read match results and update bracket state"
+    difficulty: easy
+    
+  - id: task_medium_conflict
+    name: "Server Conflict Resolution"
+    description: "Handle server conflicts during overtime matches"
+    difficulty: medium
+    
+  - id: task_hard_dropout
+    name: "Team Dropout Management"
+    description: "Manage team dropouts and prize pool recalculation"
+    difficulty: hard
+
+environment:
+  type: "tournament_management"
+  observation_space: "structured"
+  action_space: "structured"
+  reward_range: [0.0, 1.0]
+
+server:
+  port: 8001
+  host: "127.0.0.1"
+  
+dependencies:
+  - fastapi>=0.104.0
+  - uvicorn>=0.24.0
+  - pydantic>=2.5.0
+  - openai>=1.0.0
