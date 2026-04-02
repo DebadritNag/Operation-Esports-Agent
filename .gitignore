@@ -44,6 +44,7 @@ Thumbs.db
 outputs/
 uv.lock
 *.log
+EVALUATION.md
 
 # Test artifacts
 .pytest_cache/
