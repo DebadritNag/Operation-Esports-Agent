@@ -404,7 +404,7 @@ async def web_interface():
 
 def main():
     """Main entry point for the server."""
-    # Always use 1 worker — the env state is in-process memory,
+    # Always use 1 worker - the env state is in-process memory,
     # multiple workers each get their own env instance causing
     # reset/step to hit different processes and lose state.
     uvicorn.run(

@@ -21,14 +21,14 @@ Health: https://Debadrit-esports-tournament-env.hf.space/health
 
 ## Environment Description and Motivation
 
-Esports tournaments are real operational infrastructure. A major event like ESL One or The International runs on live server allocation, dynamic bracket management, and prize pool contracts — all of which must be updated in real time, often under pressure, with zero tolerance for errors. A wrong bracket update or an incorrect prize distribution is not a cosmetic bug; it affects team standings, contracts, and payouts worth thousands of dollars.
+Esports tournaments are real operational infrastructure. A major event like ESL One or The International runs on live server allocation, dynamic bracket management, and prize pool contracts - all of which must be updated in real time, often under pressure, with zero tolerance for errors. A wrong bracket update or an incorrect prize distribution is not a cosmetic bug; it affects team standings, contracts, and payouts worth thousands of dollars.
 
-This environment models that operational reality. The agent acts as an automated Tournament Admin API — it receives live alerts about match conclusions, server conflicts, and team withdrawals, and must respond with precise, structured JSON commands. There is no room for approximation: the grader checks exact state matches, not fuzzy intent.
+This environment models that operational reality. The agent acts as an automated Tournament Admin API - it receives live alerts about match conclusions, server conflicts, and team withdrawals, and must respond with precise, structured JSON commands. There is no room for approximation: the grader checks exact state matches, not fuzzy intent.
 
 This is not a game or a toy because:
 
 - The decision space mirrors real backend ops tooling used by tournament organizers
-- Actions have cascading consequences — a wrong server reallocation double-books infrastructure; a wrong prize split fails financial reconciliation
+- Actions have cascading consequences - a wrong server reallocation double-books infrastructure; a wrong prize split fails financial reconciliation
 - The hard task requires multi-step reasoning: parse a dropout alert, identify the forfeit winner, zero one account, and redistribute funds with correct arithmetic, all in a single atomic action
 - The reward function is strict: partial credit only where operationally meaningful, full credit only on exact correctness
 
@@ -64,7 +64,7 @@ Example observation:
 
 ## Action Space
 
-The agent submits an `Action` object to `/step`. All fields are optional — include only what the task requires:
+The agent submits an `Action` object to `/step`. All fields are optional - include only what the task requires:
 
 ```python
 class Action(BaseModel):
@@ -88,7 +88,7 @@ The environment applies actions in this order: match updates, server reallocatio
 
 ## Tasks
 
-### Task 1: Match Processing — Easy
+### Task 1: Match Processing - Easy
 
 **Task ID:** `task_easy_bracket`
 
@@ -117,11 +117,11 @@ The environment applies actions in this order: match updates, server reallocatio
 
 ---
 
-### Task 2: Server Conflict Resolution — Medium
+### Task 2: Server Conflict Resolution - Medium
 
 **Task ID:** `task_medium_conflict`
 
-**Difficulty:** Medium. Requires identifying which server is occupied, choosing an available one, and composing a broadcast — two independent sub-tasks.
+**Difficulty:** Medium. Requires identifying which server is occupied, choosing an available one, and composing a broadcast - two independent sub-tasks.
 
 **Scenario:** Match M2 is in overtime on `eu-west-1`. Match M3 is scheduled to start on the same server in 5 minutes. The agent must reallocate M3 to a free server and broadcast a delay notice.
 
@@ -151,7 +151,7 @@ The environment applies actions in this order: match updates, server reallocatio
 
 ---
 
-### Task 3: Team Dropout Management — Hard
+### Task 3: Team Dropout Management - Hard
 
 **Task ID:** `task_hard_dropout`
 
@@ -270,7 +270,7 @@ python validate_submission.py https://Debadrit-esports-tournament-env.hf.space
 ### Web UI Usage
 
 1. Open https://Debadrit-esports-tournament-env.hf.space/ui
-2. Click "Reset Task" on any task — the Execute button enables after a successful reset
+2. Click "Reset Task" on any task - the Execute button enables after a successful reset
 3. Click "Execute Action" to run the pre-configured correct action
 4. Review the reward and completion status
 
