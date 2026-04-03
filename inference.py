@@ -18,7 +18,7 @@ class EsportsInferenceClient:
         self.api_key = os.getenv("HF_TOKEN")
         self.api_base_url = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
         self.model_name = os.getenv("MODEL_NAME", "meta-llama/Meta-Llama-3-8B-Instruct")
-        self.env_url = "http://localhost:8001"
+        self.env_url = os.getenv("ENV_URL", "http://localhost:7860")
         
         if not self.api_key:
             raise ValueError("HF_TOKEN environment variable is required")
@@ -97,17 +97,30 @@ You must respond with a valid JSON object containing an action. The action can h
 
 Only include fields that are relevant to the current task.
 
+CRITICAL: Your response must be valid JSON. Do not include any explanations, comments, or text outside the JSON object.
+
 Example response format:
 {{
     "update_matches": {{"M1": "Team_Alpha"}},
     "broadcast_message": "Match schedule updated due to server conflict"
+}}
+
+For prize pool adjustments, use exact decimal numbers:
+{{
+    "update_matches": {{"M4": "Team_Solid"}},
+    "adjust_prize_pool": {{
+        "Team_Liquid": 0.0,
+        "Team_Solid": 2000.0,
+        "Team_Spirit": 2000.0,
+        "Team_Falcon": 2000.0
+    }}
 }}"""
         
         user_prompt = f"""Current tournament observation:
 {json.dumps(observation, indent=2)}
 
 Based on this observation and the active alerts, what action should be taken?
-Respond with only a JSON object containing the action."""
+Respond with ONLY a valid JSON object containing the action. No explanations or additional text."""
         
         response = self.client.chat.completions.create(
             model=self.model_name,
@@ -121,13 +134,70 @@ Respond with only a JSON object containing the action."""
         
         action_text = response.choices[0].message.content.strip()
         
-        # Try to extract JSON from the response
-        if action_text.startswith("```json"):
-            action_text = action_text.split("```json")[1].split("```")[0].strip()
-        elif action_text.startswith("```"):
-            action_text = action_text.split("```")[1].split("```")[0].strip()
-        
-        return json.loads(action_text)
+        # More robust JSON extraction
+        try:
+            # Try to extract JSON from code blocks
+            if "```json" in action_text:
+                json_start = action_text.find("```json") + 7
+                json_end = action_text.find("```", json_start)
+                if json_end != -1:
+                    action_text = action_text[json_start:json_end].strip()
+            elif "```" in action_text:
+                json_start = action_text.find("```") + 3
+                json_end = action_text.find("```", json_start)
+                if json_end != -1:
+                    action_text = action_text[json_start:json_end].strip()
+            
+            # Find JSON object boundaries
+            if not action_text.startswith("{"):
+                # Look for the first { and last }
+                start_idx = action_text.find("{")
+                end_idx = action_text.rfind("}")
+                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                    action_text = action_text[start_idx:end_idx+1]
+            
+            # Handle mathematical expressions in JSON (common LLM mistake)
+            import re
+            # More comprehensive approach - find all mathematical expressions
+            # Pattern: number operator number (with optional whitespace)
+            pattern = r'(\d+(?:\.\d+)?)\s*([\+\-\*\/])\s*(\d+(?:\.\d+)?)'
+
+            def replace_math(match):
+                num1 = float(match.group(1))
+                op = match.group(2)
+                num2 = float(match.group(3))
+                
+                if op == '+':
+                    result = num1 + num2
+                elif op == '-':
+                    result = num1 - num2
+                elif op == '*':
+                    result = num1 * num2
+                elif op == '/':
+                    result = num1 / num2
+                
+                return str(result)
+
+            action_text = re.sub(pattern, replace_math, action_text)
+            
+            # Fix common JSON syntax errors
+            action_text = re.sub(r':\s*:\s*', ': ', action_text)  # Fix double colons
+            action_text = re.sub(r',\s*}', '}', action_text)      # Remove trailing commas
+            action_text = re.sub(r',\s*]', ']', action_text)      # Remove trailing commas in arrays
+            action_text = re.sub(r'}\s*}', '}', action_text)      # Fix double closing braces
+            
+            # Fix incomplete JSON (missing closing brace)
+            if action_text.count('{') > action_text.count('}'):
+                action_text += '}'
+            
+            # Parse JSON
+            return json.loads(action_text)
+            
+        except json.JSONDecodeError as e:
+            # If JSON parsing fails, return empty action
+            print(f"JSON parsing error: {e}")
+            print(f"Raw LLM output: {action_text}")
+            return {}
     
     def run_task(self, task_id: str) -> None:
         """Run a complete task episode with strict STDOUT formatting."""

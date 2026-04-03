@@ -6,6 +6,7 @@ import copy
 import os
 from typing import Dict, Any, Tuple
 from models import Observation, Action
+from graders import grade_easy_bracket, grade_medium_conflict, grade_hard_dropout
 
 
 class TournamentEnvironment:
@@ -19,29 +20,6 @@ class TournamentEnvironment:
         
         # Path to data directory
         self.data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-        
-        # Expected exact solutions for grading (updated to match new JSON structure)
-        self.expected_solutions = {
-            "task_easy_bracket": {
-                "bracket_state": {
-                    "M1": "Team_Alpha",  # Based on alert: Team_Alpha defeated Team_Beta
-                    "M2": "pending"
-                }
-            },
-            "task_medium_conflict": {
-                # M3 should be reallocated to an available server (eu-west-2 or eu-west-3)
-                "available_servers": ["eu-west-2", "eu-west-3"]
-            },
-            "task_hard_dropout": {
-                "bracket_state": {"M4": "Team_Solid"},  # forfeit win to Team_Solid
-                "prize_pool_adjustment": {
-                    "Team_Liquid": 0.0,  # loses their allocation
-                    "Team_Solid": 2000.0,  # 1000 + 1000 (3000/3)
-                    "Team_Spirit": 2000.0,  # 1000 + 1000 (3000/3)
-                    "Team_Falcon": 2000.0   # 1000 + 1000 (3000/3)
-                }
-            }
-        }
     
     def _load_task_data(self, task_id: str) -> Dict[str, Any]:
         """Load task data from JSON file."""
@@ -127,78 +105,12 @@ class TournamentEnvironment:
                     self.current_state["prize_pool_status"][team_id] = amount
     
     def _grade_action(self, action: Action) -> float:
-        """Grade action based on current task."""
+        """Grade action based on current task using imported grading functions."""
         if self.current_task == "task_easy_bracket":
-            return self._grade_easy_bracket(action)
+            return grade_easy_bracket(action, self.current_state)
         elif self.current_task == "task_medium_conflict":
-            return self._grade_medium_conflict(action)
+            return grade_medium_conflict(action, self.current_state)
         elif self.current_task == "task_hard_dropout":
-            return self._grade_hard_dropout(action)
+            return grade_hard_dropout(action, self.current_state)
         else:
             return 0.0
-    
-    def _grade_easy_bracket(self, action: Action) -> float:
-        """Grade Task 1: Match processing - 1.0 if bracket_state matches expected exact JSON, 0.0 otherwise."""
-        if not action.update_matches:
-            return 0.0
-        
-        expected = self.expected_solutions["task_easy_bracket"]["bracket_state"]
-        current = self.current_state["bracket_state"]
-        
-        # Check if bracket state matches expected solution exactly
-        if current == expected:
-            return 1.0
-        else:
-            return 0.0
-    
-    def _grade_medium_conflict(self, action: Action) -> float:
-        """Grade Task 2: Server conflict - +0.5 for reallocation without double-booking, +0.5 for broadcast."""
-        score = 0.0
-        
-        # +0.5 for correct server reallocation without double-booking
-        if action.reallocate_servers:
-            if "M3" in action.reallocate_servers:
-                reallocated_server = action.reallocate_servers["M3"]
-                server_availability = self.current_state.get("server_availability", {})
-                available_servers = self.expected_solutions["task_medium_conflict"]["available_servers"]
-                
-                # Check if reallocated to an available server (not eu-west-1 which is occupied)
-                if (reallocated_server in available_servers and 
-                    server_availability.get(reallocated_server, False)):
-                    score += 0.5
-        
-        # +0.5 for broadcast message
-        if action.broadcast_message and len(action.broadcast_message.strip()) > 0:
-            score += 0.5
-        
-        return min(score, 1.0)
-    
-    def _grade_hard_dropout(self, action: Action) -> float:
-        """Grade Task 3: Team dropout - +0.4 for match winner, +0.6 for exact prize pool math."""
-        score = 0.0
-        
-        # +0.4 for correctly updating match winner (forfeit to Team_Solid)
-        if action.update_matches and "M4" in action.update_matches:
-            if action.update_matches["M4"] == "Team_Solid":
-                score += 0.4
-        
-        # +0.6 for exact correct prize pool math
-        if action.adjust_prize_pool:
-            expected_amounts = self.expected_solutions["task_hard_dropout"]["prize_pool_adjustment"]
-            
-            tolerance = 0.01  # Allow small floating point differences
-            all_correct = True
-            
-            for team_id, expected_amount in expected_amounts.items():
-                if team_id not in action.adjust_prize_pool:
-                    all_correct = False
-                    break
-                actual_amount = action.adjust_prize_pool[team_id]
-                if abs(actual_amount - expected_amount) > tolerance:
-                    all_correct = False
-                    break
-            
-            if all_correct:
-                score += 0.6
-        
-        return min(score, 1.0)

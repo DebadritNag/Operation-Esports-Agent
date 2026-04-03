@@ -10,7 +10,7 @@ pinned: false
 
 # Esports Tournament Operations Manager
 
-**Version 2.0** | OpenEnv-compliant agentic environment
+**Version 2.1 (Final)** | OpenEnv-compliant agentic environment
 
 Live Space: https://Debadrit-esports-tournament-env.hf.space
 Web UI: https://Debadrit-esports-tournament-env.hf.space/ui
@@ -247,10 +247,10 @@ docker build -t esports-env .
 docker run -p 7860:7860 -e HF_TOKEN=your_token esports-env
 ```
 
-### Test the Deployed Space
+### Validate Submission
 
 ```bash
-python test_space.py
+python validate_submission.py https://Debadrit-esports-tournament-env.hf.space
 ```
 
 ---
@@ -315,10 +315,11 @@ esports-env/
     task_hard_dropout.json
   models.py            Pydantic models (Action, Observation, StepResponse)
   graders.py           Standalone grading functions
-  inference.py         Baseline inference script
+  inference.py         Baseline inference script with improved JSON parsing
   main.py              Entry point
   client.py            OpenEnv client
   openenv.yaml         Environment manifest
+  validate_submission.py  Comprehensive validation script
   Dockerfile
   requirements.txt
 ```
@@ -326,6 +327,12 @@ esports-env/
 ---
 
 ## Changelog
+
+### v2.1 (Final)
+- Removed test files: `test_hard_task.py`, `test_space.py`, `validate.py`
+- Improved JSON parsing in `inference.py` to handle mathematical expressions
+- Unified grading system: single source of truth in `graders.py`
+- Production-ready codebase with comprehensive validation via `validate_submission.py`
 
 ### v2.0
 - Fixed JS crash: replaced fragile `string.replace('_', '-')` with explicit `TASK_MAP`

@@ -2,6 +2,7 @@
 FastAPI application for the Esports Tournament Operations Manager environment.
 """
 import os
+import sys
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -9,6 +10,9 @@ from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
 import uvicorn
 from typing import Dict, Any
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from models import Action, Observation, StepResponse
 from server.environment import TournamentEnvironment

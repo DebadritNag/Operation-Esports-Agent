@@ -13,7 +13,7 @@ from models import Action, Observation, StepResponse
 class EsportsClient:
     """Client for interacting with the esports tournament environment."""
     
-    def __init__(self, base_url: str = "http://localhost:8001"):
+    def __init__(self, base_url: str = "http://localhost:7860"):
         """
         Initialize the client.
         
@@ -57,7 +57,7 @@ class EsportsClient:
 class EsportsInferenceClient(EsportsClient):
     """Extended client with LLM inference capabilities."""
     
-    def __init__(self, base_url: str = "http://localhost:8001"):
+    def __init__(self, base_url: str = "http://localhost:7860"):
         super().__init__(base_url)
         
         # LLM configuration
@@ -117,17 +117,30 @@ You must respond with a valid JSON object containing an action. The action can h
 
 Only include fields that are relevant to the current task.
 
+CRITICAL: Your response must be valid JSON. Do not include any explanations, comments, or text outside the JSON object.
+
 Example response format:
 {{
     "update_matches": {{"M1": "Team_Alpha"}},
     "broadcast_message": "Match schedule updated due to server conflict"
+}}
+
+For prize pool adjustments, use exact decimal numbers:
+{{
+    "update_matches": {{"M4": "Team_Solid"}},
+    "adjust_prize_pool": {{
+        "Team_Liquid": 0.0,
+        "Team_Solid": 2000.0,
+        "Team_Spirit": 2000.0,
+        "Team_Falcon": 2000.0
+    }}
 }}"""
         
         user_prompt = f"""Current tournament observation:
 {observation.model_dump_json(indent=2)}
 
 Based on this observation and the active alerts, what action should be taken?
-Respond with only a JSON object containing the action."""
+Respond with ONLY a valid JSON object containing the action. No explanations or additional text."""
         
         response = self.llm_client.chat.completions.create(
             model=self.model_name,
@@ -141,14 +154,37 @@ Respond with only a JSON object containing the action."""
         
         action_text = response.choices[0].message.content.strip()
         
-        # Try to extract JSON from the response
-        if action_text.startswith("```json"):
-            action_text = action_text.split("```json")[1].split("```")[0].strip()
-        elif action_text.startswith("```"):
-            action_text = action_text.split("```")[1].split("```")[0].strip()
-        
-        action_dict = json.loads(action_text)
-        return Action(**action_dict)
+        # More robust JSON extraction
+        try:
+            # Try to extract JSON from code blocks
+            if "```json" in action_text:
+                json_start = action_text.find("```json") + 7
+                json_end = action_text.find("```", json_start)
+                if json_end != -1:
+                    action_text = action_text[json_start:json_end].strip()
+            elif "```" in action_text:
+                json_start = action_text.find("```") + 3
+                json_end = action_text.find("```", json_start)
+                if json_end != -1:
+                    action_text = action_text[json_start:json_end].strip()
+            
+            # Find JSON object boundaries
+            if not action_text.startswith("{"):
+                # Look for the first { and last }
+                start_idx = action_text.find("{")
+                end_idx = action_text.rfind("}")
+                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                    action_text = action_text[start_idx:end_idx+1]
+            
+            # Parse JSON and create Action object
+            action_dict = json.loads(action_text)
+            return Action(**action_dict)
+            
+        except (json.JSONDecodeError, ValueError) as e:
+            # If JSON parsing fails, return empty action
+            print(f"JSON parsing error: {e}")
+            print(f"Raw LLM output: {action_text}")
+            return Action()
     
     def run_episode(self, task_id: str, max_steps: int = 10) -> Dict[str, Any]:
         """Run a complete episode for a task."""
