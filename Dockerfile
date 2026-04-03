@@ -11,6 +11,10 @@ ENV HOST=0.0.0.0
 ENV MAX_CONCURRENT_ENVS=100
 ENV ENABLE_WEB_INTERFACE=true
 
+# Hugging Face API configuration (tokens should be set via HF Spaces secrets)
+ENV API_BASE_URL=https://router.huggingface.co/v1
+ENV MODEL_NAME=meta-llama/Meta-Llama-3-8B-Instruct
+
 WORKDIR /app
 
 # Install system dependencies

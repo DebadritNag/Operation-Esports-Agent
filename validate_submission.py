@@ -33,7 +33,7 @@ def check_hf_space(space_url: str) -> bool:
             print(f"X Reset endpoint returned {reset_response.status_code}")
             return False
         
-        print("✓ HF Space deployment: PASSED")
+        print("PASSED - HF Space deployment: PASSED")
         return True
         
     except Exception as e:
@@ -49,7 +49,7 @@ def check_openenv_compliance() -> bool:
                               capture_output=True, text=True, timeout=30)
         
         if result.returncode == 0:
-            print("✓ OpenEnv compliance: PASSED")
+            print("PASSED - OpenEnv compliance: PASSED")
             return True
         else:
             print(f"X OpenEnv validation failed: {result.stderr}")
@@ -90,7 +90,7 @@ def check_inference_script() -> bool:
             print(f"X Required STDOUT pattern {pattern} not found")
             return False
     
-    print("✓ Inference script: PASSED")
+    print("PASSED - Inference script: PASSED")
     return True
 
 def check_tasks_and_graders() -> bool:
@@ -117,7 +117,7 @@ def check_tasks_and_graders() -> bool:
             print(f"X Grader function {func} not found")
             return False
     
-    print("✓ Tasks and graders: PASSED")
+    print("PASSED - Tasks and graders: PASSED")
     return True
 
 def check_dockerfile() -> bool:
@@ -136,7 +136,7 @@ def check_dockerfile() -> bool:
         print("X Dockerfile must expose port 7860 for HF Spaces")
         return False
     
-    print("✓ Dockerfile: PASSED")
+    print("PASSED - Dockerfile: PASSED")
     return True
 
 def run_validation(space_url: str) -> bool:
@@ -167,7 +167,7 @@ def run_validation(space_url: str) -> bool:
     print("=" * 50)
     
     for i, (name, _) in enumerate(checks):
-        status = "✓ PASSED" if results[i] else "X FAILED"
+        status = "PASSED" if results[i] else "X FAILED"
         print(f"{name}: {status}")
     
     all_passed = all(results)

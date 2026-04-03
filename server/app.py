@@ -6,7 +6,7 @@ import sys
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from pydantic import ValidationError
 import uvicorn
 from typing import Dict, Any
@@ -30,7 +30,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Add CORS middleware for web access
+# CORS - allow all origins including huggingface.co iframe
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -39,18 +39,62 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Custom middleware to set headers that allow iframe embedding on huggingface.co
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+
+class IframeCompatMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        response.headers["X-Frame-Options"] = "ALLOWALL"
+        response.headers["Content-Security-Policy"] = "frame-ancestors *"
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        return response
+
+app.add_middleware(IframeCompatMiddleware)
+
 # Global environment instance
 env = TournamentEnvironment()
 
 
 @app.get("/")
 async def root():
-    """
-    Root endpoint with environment information.
-    
-    Returns:
-        Environment information and available endpoints
-    """
+    """Root endpoint - returns API info as JSON."""
+    return {
+        "name": "Esports Tournament Operations Manager",
+        "version": "1.0.0",
+        "description": "OpenEnv environment for tournament management operations",
+        "status": "running",
+        "config": {
+            "workers": WORKERS,
+            "port": PORT,
+            "host": HOST,
+            "max_concurrent_envs": MAX_CONCURRENT_ENVS,
+            "web_interface_enabled": ENABLE_WEB_INTERFACE
+        },
+        "available_tasks": [
+            "task_easy_bracket",
+            "task_medium_conflict",
+            "task_hard_dropout"
+        ],
+        "endpoints": {
+            "POST /reset?task_id={id}": "Reset environment for specific task",
+            "POST /step": "Execute action in environment",
+            "GET /state": "Get current environment state",
+            "GET /health": "Health check",
+            "GET /docs": "API documentation",
+            "GET /ui": "Interactive web interface"
+        },
+        "docs_url": "/docs",
+        "ui_url": "/ui"
+    }
+
+
+@app.get("/api")
+async def api_info():
+    """API information endpoint."""
     return {
         "name": "Esports Tournament Operations Manager",
         "version": "1.0.0",
@@ -79,6 +123,12 @@ async def root():
         "docs_url": "/docs",
         "ui_url": "/ui" if ENABLE_WEB_INTERFACE else None
     }
+
+
+@app.get("/web")
+async def web_probe():
+    """HF Spaces internal probe endpoint - returns UI for iframe embedding."""
+    return await web_interface()
 
 
 @app.post("/reset", response_model=Observation)
@@ -155,6 +205,191 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.post("/run_task")
+async def run_complete_task(task_id: str):
+    """
+    Run a complete task with detailed step-by-step output.
+    Calls the environment directly in-process (no HTTP self-call).
+    """
+    import io
+    import json
+    from contextlib import redirect_stdout
+    from openai import OpenAI
+
+    hf_token = os.getenv("HF_TOKEN")
+    if not hf_token:
+        raise HTTPException(
+            status_code=500,
+            detail="HF_TOKEN environment variable is required. Set it in Hugging Face Spaces secrets."
+        )
+
+    api_base_url = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+    model_name   = os.getenv("MODEL_NAME",   "meta-llama/Meta-Llama-3-8B-Instruct")
+
+    task_descriptions = {
+        "task_easy_bracket": """You are managing an esports tournament bracket.
+TASK: Read active_alerts to find match results, then update bracket_state with the correct winners.
+Only include update_matches in your response. No other fields needed.""",
+
+        "task_medium_conflict": """You are handling a server conflict during a tournament.
+TASK: A match has a server conflict. You must:
+1. Use reallocate_servers to move the conflicted match to an AVAILABLE server (check server_availability for True values, avoid occupied ones)
+2. Use broadcast_message to notify teams
+Only include reallocate_servers and broadcast_message in your response.""",
+
+        "task_hard_dropout": """You are handling a team dropout situation.
+TASK: Read active_alerts carefully. It tells you EXACTLY what to do:
+- Which match to forfeit and to whom -> use update_matches
+- How much prize money to redistribute and to which teams -> use adjust_prize_pool
+
+CRITICAL RULES for prize pool:
+- Set the dropped team's prize to 0.0
+- Divide their original prize EVENLY among the remaining active teams
+- Use the EXACT amounts from the observation's prize_pool_status to calculate
+- Formula: new_amount = original_amount + (dropped_team_prize / num_remaining_teams)
+- Do NOT include reallocate_servers or broadcast_message
+
+Example: if dropped team had 3000 and 3 remaining teams each had 1000:
+each remaining team gets 1000 + (3000/3) = 1000 + 1000 = 2000
+
+Respond with ONLY update_matches and adjust_prize_pool.""",
+    }
+
+    if task_id not in task_descriptions:
+        raise HTTPException(status_code=400, detail=f"Unknown task_id: {task_id}")
+
+    try:
+        llm = OpenAI(base_url=api_base_url, api_key=hf_token)
+
+        # Reset the shared env directly
+        observation = env.reset(task_id)
+        obs_dict = observation.model_dump()
+        # Keep a snapshot of the initial observation for retries
+        initial_obs_dict = dict(obs_dict)
+        task_desc = task_descriptions[task_id]
+
+        max_steps = 10
+        steps = []
+        rewards = []
+        success = False
+
+        for step_num in range(1, max_steps + 1):
+            # --- Query LLM ---
+            system_prompt = f"""{task_desc}
+
+Respond with a valid JSON object ONLY. No explanations, no markdown, no text outside the JSON.
+Available action fields (only include what is needed for this task):
+- update_matches: dict mapping match_id to winner_id (string)
+- reallocate_servers: dict mapping match_id to server_id (string)
+- broadcast_message: string
+- adjust_prize_pool: dict mapping team_id to NEW total amount (float)
+
+IMPORTANT: Use exact decimal numbers like 2000.0, not expressions like 1000 + 1000."""
+
+            user_prompt = f"""Current observation:
+{json.dumps(obs_dict, indent=2)}
+
+Based on the active_alerts and current state, respond with the correct action JSON."""
+
+            try:
+                response = llm.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user",   "content": user_prompt},
+                    ],
+                    temperature=0.0,
+                    max_tokens=300,
+                )
+                action_text = response.choices[0].message.content.strip()
+
+                # Extract JSON from possible markdown fences
+                import re
+                if "```" in action_text:
+                    m = re.search(r"```(?:json)?\s*([\s\S]*?)```", action_text)
+                    if m:
+                        action_text = m.group(1).strip()
+                if not action_text.startswith("{"):
+                    s = action_text.find("{")
+                    e = action_text.rfind("}")
+                    if s != -1 and e != -1:
+                        action_text = action_text[s:e+1]
+
+                # Evaluate inline math expressions like 1000 + 1000 or 3000/3
+                action_text = re.sub(
+                    r'(\d+(?:\.\d+)?)\s*([\+\-\*\/])\s*(\d+(?:\.\d+)?)',
+                    lambda m: str(round(eval(m.group(0)), 4)),
+                    action_text
+                )
+                # Remove trailing commas before } or ]
+                action_text = re.sub(r',\s*([}\]])', r'\1', action_text)
+                # Fix missing closing braces
+                open_count = action_text.count('{')
+                close_count = action_text.count('}')
+                if open_count > close_count:
+                    action_text += '}' * (open_count - close_count)
+
+                action_dict = json.loads(action_text)
+            except Exception as llm_err:
+                steps.append({"step": step_num, "action": "{}", "reward": 0.0, "done": True, "error": str(llm_err)})
+                rewards.append(0.0)
+                success = False
+                break
+
+            # --- Execute action directly on env ---
+            # Always reset before each attempt so state doesn't compound
+            env.reset(task_id)
+            from models import Action
+            action_obj = Action(**action_dict)
+            observation, reward, done, info = env.step(action_obj)
+            obs_dict = observation.model_dump()
+            rewards.append(reward)
+
+            action_json_str = json.dumps(action_dict, separators=(',', ':'))
+            steps.append({
+                "step": step_num,
+                "action": action_json_str,
+                "reward": reward,
+                "done": done,
+                "error": None,
+                "info": info,
+            })
+
+            if done or reward >= 1.0:
+                success = reward >= 1.0
+                break
+
+            # On partial reward, keep using the initial observation so the LLM
+            # doesn't see a compounded/mutated state on the next attempt
+            obs_dict = initial_obs_dict
+
+        # Build raw output string matching OpenEnv STDOUT format
+        raw_lines = [f"[START] task={task_id} env=esports_env model={model_name}"]
+        for s in steps:
+            done_str = "true" if s["done"] else "false"
+            err_str  = s["error"] if s["error"] else "null"
+            raw_lines.append(f"[STEP] step={s['step']} action={s['action']} reward={s['reward']:.2f} done={done_str} error={err_str}")
+        success_str  = "true" if success else "false"
+        rewards_str  = ",".join(f"{r:.2f}" for r in rewards)
+        raw_lines.append(f"[END] success={success_str} steps={len(rewards)} rewards={rewards_str}")
+
+        return {
+            "task_id": task_id,
+            "start_info": {"task": task_id, "env": "esports_env", "model": model_name},
+            "steps": steps,
+            "end_info": {"success": success, "steps": len(rewards), "rewards": rewards},
+            "raw_output": "\n".join(raw_lines),
+            "success": success,
+            "total_reward": sum(rewards),
+            "step_count": len(steps),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Task execution failed: {str(e)}")
+
+
 @app.get("/ui", response_class=HTMLResponse)
 async def web_interface():
     """
@@ -165,14 +400,17 @@ async def web_interface():
     """
     if not ENABLE_WEB_INTERFACE:
         raise HTTPException(status_code=404, detail="Web interface is disabled")
-    
+
+    # Absolute backend URL injected into JS so fetch works inside the HF iframe too
+    backend_url = "https://debadrit-esports-tournament-env.hf.space"
+
     html_content = """
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Esports Tournament Operations Manager</title>
+        <title>Esports Tournament Operations Manager v2.1</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
             .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -208,7 +446,7 @@ async def web_interface():
         <div class="container">
             <div class="header">
                 <h1>Esports Tournament Operations Manager</h1>
-                <p>Interactive OpenEnv Environment for Tournament Management</p>
+                <p>Interactive OpenEnv Environment for Tournament Management | <strong>Version 2.1 Final</strong></p>
             </div>
 
             <div class="workflow-guide">
@@ -216,10 +454,10 @@ async def web_interface():
                 <ol class="workflow-steps">
                     <li><span class="step-number">1</span>Click "Reset Task" to initialize a specific task environment</li>
                     <li><span class="step-number">2</span>Wait for the reset to complete and show active alerts</li>
-                    <li><span class="step-number">3</span>Click "Execute Action" to perform the task-specific action</li>
-                    <li><span class="step-number">4</span>Review the reward and completion status</li>
+                    <li><span class="step-number">3</span>Click "Run with LLM" to execute the complete task with AI agent</li>
+                    <li><span class="step-number">4</span>Review the detailed step-by-step execution and final results</li>
                 </ol>
-                <p><strong>Important:</strong> You must reset a task before executing actions. Each task maintains its own state.</p>
+                <p><strong>Important:</strong> You must reset a task before running it. The LLM agent will analyze the situation and execute appropriate actions automatically.</p>
             </div>
 
             <div class="task-section" id="task-easy-bracket">
@@ -227,10 +465,10 @@ async def web_interface():
                 <div class="task-description">Read match results and update bracket winners</div>
                 <div class="controls">
                     <button class="btn-primary" onclick="resetTask('task_easy_bracket', 'easy')">Reset Task</button>
-                    <button class="btn-success" id="easy-execute" onclick="executeEasyAction()" disabled>Execute Action</button>
+                    <button class="btn-success" id="easy-execute" onclick="executeEasyAction()" disabled>Run with LLM</button>
                     <button class="btn-warning" onclick="clearTask('easy')">Clear</button>
                 </div>
-                <div id="easy-output" class="output">Click "Reset Task" to begin...</div>
+                <div id="easy-output" class="output">Click "Reset Task" to begin, then "Run with LLM" to see detailed execution...</div>
             </div>
 
             <div class="task-section" id="task-medium-conflict">
@@ -238,10 +476,10 @@ async def web_interface():
                 <div class="task-description">Handle server conflicts and reallocate resources</div>
                 <div class="controls">
                     <button class="btn-primary" onclick="resetTask('task_medium_conflict', 'medium')">Reset Task</button>
-                    <button class="btn-success" id="medium-execute" onclick="executeMediumAction()" disabled>Execute Action</button>
+                    <button class="btn-success" id="medium-execute" onclick="executeMediumAction()" disabled>Run with LLM</button>
                     <button class="btn-warning" onclick="clearTask('medium')">Clear</button>
                 </div>
-                <div id="medium-output" class="output">Click "Reset Task" to begin...</div>
+                <div id="medium-output" class="output">Click "Reset Task" to begin, then "Run with LLM" to see detailed execution...</div>
             </div>
 
             <div class="task-section" id="task-hard-dropout">
@@ -249,10 +487,10 @@ async def web_interface():
                 <div class="task-description">Manage team dropouts and prize pool recalculation</div>
                 <div class="controls">
                     <button class="btn-primary" onclick="resetTask('task_hard_dropout', 'hard')">Reset Task</button>
-                    <button class="btn-success" id="hard-execute" onclick="executeHardAction()" disabled>Execute Action</button>
+                    <button class="btn-success" id="hard-execute" onclick="executeHardAction()" disabled>Run with LLM</button>
                     <button class="btn-warning" onclick="clearTask('hard')">Clear</button>
                 </div>
-                <div id="hard-output" class="output">Click "Reset Task" to begin...</div>
+                <div id="hard-output" class="output">Click "Reset Task" to begin, then "Run with LLM" to see detailed execution...</div>
             </div>
 
             <div class="task-section">
@@ -266,6 +504,9 @@ async def web_interface():
         </div>
 
         <script>
+            // Absolute backend URL - works both direct and inside HF Spaces iframe
+            const API_BASE = "https://debadrit-esports-tournament-env.hf.space";
+
             let activeTasks = new Set();
 
             // Maps full task_id -> { sectionId, executeBtnId, outputId, shortType }
@@ -296,7 +537,7 @@ async def web_interface():
                 const taskId = Object.keys(TASK_MAP).find(k => TASK_MAP[k].shortType === shortType);
                 if (!taskId) return;
                 updateTaskUI(taskId, false);
-                document.getElementById(TASK_MAP[taskId].outputId).innerHTML = 'Click "Reset Task" to begin...';
+                document.getElementById(TASK_MAP[taskId].outputId).innerHTML = 'Click "Reset Task" to begin, then "Run with LLM" to see detailed execution...';
             }
 
             async function resetTask(taskId, taskType) {
@@ -310,7 +551,7 @@ async def web_interface():
                 
                 try {
                     output.innerHTML = 'Resetting task environment...';
-                    const response = await fetch(`/reset?task_id=${taskId}`, { method: 'POST' });
+                    const response = await fetch(`${API_BASE}/reset?task_id=${taskId}`, { method: 'POST' });
                     const data = await response.json();
                     
                     if (response.ok) {
@@ -318,7 +559,7 @@ async def web_interface():
                         output.innerHTML = `<div class="status success">Task Reset Successful - Ready for Action</div>` +
                                          `<strong>Active Alerts:</strong>\\n${JSON.stringify(data.active_alerts, null, 2)}\\n\\n` +
                                          `<strong>Initial State:</strong>\\n${JSON.stringify(data, null, 2)}\\n\\n` +
-                                         `<div class="status info">You can now click "Execute Action" to proceed</div>`;
+                                         `<div class="status info">You can now click "Run with LLM" to execute the complete task</div>`;
                     } else {
                         updateTaskUI(taskId, false);
                         output.innerHTML = `<div class="status error">Reset Failed</div>` +
@@ -326,6 +567,60 @@ async def web_interface():
                     }
                 } catch (error) {
                     updateTaskUI(taskId, false);
+                    output.innerHTML = `<div class="status error">Network Error: ${error.message}</div>`;
+                }
+            }
+
+            async function executeCompleteTask(taskId) {
+                const t = TASK_MAP[taskId];
+                const output = document.getElementById(t.outputId);
+                
+                if (!activeTasks.has(taskId)) {
+                    output.innerHTML = `<div class="status warning">Task Not Active - please click Reset Task first</div>`;
+                    return;
+                }
+                
+                try {
+                    output.innerHTML = 'Running complete task with LLM agent...';
+                    const response = await fetch(`${API_BASE}/run_task?task_id=${taskId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        const statusClass = data.success ? 'success' : 'error';
+                        const label = data.success ? 'SUCCESS' : 'FAILED';
+                        
+                        // Build detailed step-by-step output
+                        let stepDetails = '';
+                        data.steps.forEach((step, index) => {
+                            const stepStatus = step.reward >= 1.0 ? 'success' : step.reward > 0 ? 'info' : 'error';
+                            stepDetails += `<div class="status ${stepStatus}">Step ${step.step}: Reward ${step.reward} | Done: ${step.done}</div>`;
+                            stepDetails += `Action: ${step.action}\\n`;
+                            if (step.error) {
+                                stepDetails += `Error: ${step.error}\\n`;
+                            }
+                            stepDetails += '\\n';
+                        });
+                        
+                        output.innerHTML = `<div class="status ${statusClass}">${label} - Total Reward: ${data.total_reward} | Steps: ${data.step_count}</div>` +
+                                         `<strong>Task Execution Details:</strong>\\n` +
+                                         `Model: ${data.start_info.model || 'Unknown'}\\n` +
+                                         `Environment: ${data.start_info.env || 'Unknown'}\\n\\n` +
+                                         `<strong>Step-by-Step Execution:</strong>\\n${stepDetails}` +
+                                         `<strong>Final Results:</strong>\\n` +
+                                         `Success: ${data.end_info.success}\\n` +
+                                         `Total Steps: ${data.end_info.steps}\\n` +
+                                         `Rewards: [${data.end_info.rewards ? data.end_info.rewards.join(', ') : 'None'}]\\n\\n` +
+                                         `<div class="status info">Task completed! Reset to try again.</div>`;
+                        updateTaskUI(taskId, false);
+                    } else {
+                        output.innerHTML = `<div class="status error">Task Execution Failed</div>` +
+                                         `<strong>Error Details:</strong>\\n${JSON.stringify(data, null, 2)}\\n\\n` +
+                                         `<div class="status warning">Try resetting the task and executing again</div>`;
+                    }
+                } catch (error) {
                     output.innerHTML = `<div class="status error">Network Error: ${error.message}</div>`;
                 }
             }
@@ -341,7 +636,7 @@ async def web_interface():
                 
                 try {
                     output.innerHTML = 'Executing action...';
-                    const response = await fetch('/step', {
+                    const response = await fetch(`${API_BASE}/step`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(action)
@@ -366,15 +661,15 @@ async def web_interface():
                 }
             }
 
-            function executeEasyAction()   { executeAction({ "update_matches": { "M1": "Team_Alpha" } }, 'task_easy_bracket'); }
-            function executeMediumAction() { executeAction({ "reallocate_servers": { "M3": "eu-west-2" }, "broadcast_message": "Match M3 moved due to server conflict" }, 'task_medium_conflict'); }
-            function executeHardAction()   { executeAction({ "update_matches": { "M4": "Team_Solid" }, "adjust_prize_pool": { "Team_Liquid": 0.0, "Team_Solid": 2000.0, "Team_Spirit": 2000.0, "Team_Falcon": 2000.0 } }, 'task_hard_dropout'); }
+            function executeEasyAction()   { executeCompleteTask('task_easy_bracket'); }
+            function executeMediumAction() { executeCompleteTask('task_medium_conflict'); }
+            function executeHardAction()   { executeCompleteTask('task_hard_dropout'); }
 
             async function getStatus() {
                 const output = document.getElementById('status-output');
                 try {
                     output.innerHTML = 'Fetching environment status...';
-                    const response = await fetch('/');
+                    const response = await fetch(`${API_BASE}/api`);
                     const data = await response.json();
                     output.innerHTML = `<div class="status info">Environment Status</div>` +
                                      `${JSON.stringify(data, null, 2)}`;
@@ -387,7 +682,7 @@ async def web_interface():
                 const output = document.getElementById('status-output');
                 try {
                     output.innerHTML = 'Fetching current state...';
-                    const response = await fetch('/state');
+                    const response = await fetch(`${API_BASE}/state`);
                     const data = await response.json();
                     output.innerHTML = `<div class="status info">Current State</div>` +
                                      `${JSON.stringify(data, null, 2)}`;
