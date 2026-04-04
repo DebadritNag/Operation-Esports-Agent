@@ -1,9 +1,15 @@
 .agents/
 __pycache__/
+**/__pycache__/
 *.pyc
+*.pyo
 .git/
 .gitignore
 test_exploits.py
 test_evaluator.py
 validate_submission.py
 outputs/
+uv.lock
+EVALUATION.md
+DEPLOYMENT_SUMMARY.md
+*.md.bak

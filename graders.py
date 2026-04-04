@@ -31,30 +31,19 @@ def grade_easy_bracket(action: Action, current_state: Dict[str, Any]) -> float:
 
 def grade_medium_conflict(action: Action, current_state: Dict[str, Any]) -> float:
     """
-    Grade Task 2: Server conflict resolution.
-    
-    +0.5 for correctly reallocating server without double-booking
-    +0.5 for providing broadcast message
-    Total between 0.0 and 1.0
+    Grade Task 2: Server conflict resolution (static fallback).
+    Dynamic grading is handled in environment._grade_medium_dynamic().
+    This static version is kept for backward compatibility.
     """
     score = 0.0
-    
-    # +0.5 for correct server reallocation
     if action.reallocate_servers:
-        if "M3" in action.reallocate_servers:
-            reallocated_server = action.reallocate_servers["M3"]
-            server_availability = current_state.get("server_availability", {})
-            available_servers = ["eu-west-2", "eu-west-3"]  # Available servers from current schema
-            
-            # Check if reallocated to an available server (not eu-west-1 which is occupied)
-            if (reallocated_server in available_servers and 
-                server_availability.get(reallocated_server, False)):
+        server_availability = current_state.get("server_availability", {})
+        for match_id, server_id in action.reallocate_servers.items():
+            if server_availability.get(server_id) is True:
                 score += 0.5
-    
-    # +0.5 for broadcast message
+                break
     if action.broadcast_message and len(action.broadcast_message.strip()) > 0:
         score += 0.5
-    
     return min(score, 1.0)
 
 

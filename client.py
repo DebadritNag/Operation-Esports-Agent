@@ -24,7 +24,11 @@ class EsportsClient:
         
     def reset(self, task_id: str) -> Observation:
         """Reset environment for a specific task."""
-        response = requests.post(f"{self.base_url}/reset?task_id={task_id}", timeout=10)
+        response = requests.post(
+            f"{self.base_url}/reset", 
+            json={"task_id": task_id}, 
+            timeout=10
+        )
         response.raise_for_status()
         return Observation(**response.json())
     
@@ -63,7 +67,7 @@ class EsportsInferenceClient(EsportsClient):
         # LLM configuration
         self.api_key = os.getenv("HF_TOKEN")
         self.api_base_url = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-        self.model_name = os.getenv("MODEL_NAME", "meta-llama/Meta-Llama-3-8B-Instruct")
+        self.model_name = os.getenv("MODEL_NAME", "mistralai/Mistral-7B-Instruct-v0.3")
         
         if not self.api_key:
             raise ValueError("HF_TOKEN environment variable is required")

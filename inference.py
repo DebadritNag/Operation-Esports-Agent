@@ -19,45 +19,35 @@ class EsportsInferenceClient:
         self.api_base_url = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
         self.model_name = os.getenv("MODEL_NAME", "meta-llama/Meta-Llama-3-8B-Instruct")
         self.env_url = os.getenv("ENV_URL", "http://localhost:7860")
-        
+
         if not self.api_key:
             raise ValueError("HF_TOKEN environment variable is required")
-        
-        # Initialize OpenAI client - simple and strict initialization
+
         self.client = OpenAI(
             base_url=self.api_base_url,
             api_key=self.api_key
         )
         
-        # Task descriptions for the LLM
         self.task_descriptions = {
-            "task_easy_bracket": """
-            You are managing an esports tournament bracket. You need to:
-            1. Read the match results from active_alerts
-            2. Determine the winners based on the alert message
-            3. Update the bracket_state with the correct winners
-            
-            The alert contains match results. Extract the winner and update only the matches that have results.
-            """,
-            
-            "task_medium_conflict": """
-            You are handling a server conflict during a tournament. You need to:
-            1. A match has gone into triple overtime causing server conflicts
-            2. Reallocate the conflicted match to an available server
-            3. Send a broadcast message to notify teams about the change
-            
-            Check server_availability to find available servers.
-            Use reallocate_servers to move matches and broadcast_message to notify.
-            """,
-            
-            "task_hard_dropout": """
-            You are handling a team dropout situation. You need to:
-            1. A team has dropped out due to illness
-            2. Award their current match to their opponent (forfeit)
-            3. Recalculate the prize pool by distributing the dropped team's allocation evenly among remaining teams
-            
-            Use update_matches to record the forfeit and adjust_prize_pool to redistribute money.
-            """
+            "task_easy_bracket": (
+                "You are managing an esports tournament bracket. "
+                "Read active_alerts for match results and update bracket_state with the correct winner. "
+                "Only include update_matches in your response."
+            ),
+            "task_medium_conflict": (
+                "You are handling a server conflict during a tournament. "
+                "Read active_alerts to find which match needs reallocation and which server is overloaded. "
+                "Use reallocate_servers to move the match to an AVAILABLE server (check server_availability). "
+                "Also include broadcast_message to notify teams. "
+                "Do NOT use the overloaded server."
+            ),
+            "task_hard_dropout": (
+                "You are handling a team dropout. Read active_alerts carefully. "
+                "1. Use update_matches to record the forfeit win. "
+                "2. Use adjust_prize_pool: set the dropout team to 0.0, "
+                "then add (dropout_balance * 0.50 / num_active_teams) to each active team's CURRENT balance. "
+                "Use EXACT decimal values. Do not include broadcast_message or reallocate_servers."
+            ),
         }
     
     def test_environment_health(self) -> bool:
@@ -70,7 +60,11 @@ class EsportsInferenceClient:
     
     def reset_task(self, task_id: str) -> Dict[str, Any]:
         """Reset environment for a specific task."""
-        response = requests.post(f"{self.env_url}/reset?task_id={task_id}", timeout=10)
+        response = requests.post(
+            f"{self.env_url}/reset", 
+            json={"task_id": task_id}, 
+            timeout=10
+        )
         response.raise_for_status()
         return response.json()
     

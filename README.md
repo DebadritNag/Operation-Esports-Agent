@@ -9,15 +9,15 @@ pinned: false
 
 # Esports Tournament Operations Manager
 
-**Version 2.2 (Production)** | OpenEnv-compliant agentic environment
+**Version 3.0 (Production)** | OpenEnv-compliant agentic environment
 
 | Link | URL |
 |------|-----|
-| HF Space | https://huggingface.co/spaces/Debadrit/esports-tournament-env |
-| Backend API | https://huggingface.co/spaces/Debadrit/esports-tournament-env |
-| Web UI | https://huggingface.co/spaces/Debadrit/esports-tournament-env/ui |
-| API Docs | https://huggingface.co/spaces/Debadrit/esports-tournament-env/docs |
-| Health | https://huggingface.co/spaces/Debadrit/esports-tournament-env/health |
+| HF Space | https://huggingface.co/spaces/COSMOSER/esports_env |
+| Backend API | https://huggingface.co/spaces/COSMOSER/esports_env |
+| Web UI | https://huggingface.co/spaces/COSMOSER/esports_env/ui |
+| API Docs | https://huggingface.co/spaces/COSMOSER/esports_env/docs |
+| Health | https://huggingface.co/spaces/COSMOSER/esports_env/health |
 
 ---
 
@@ -33,7 +33,9 @@ This environment models that operational reality. The agent acts as an automated
 - Actions have cascading consequences: a wrong server reallocation double-books infrastructure; a wrong prize split fails financial reconciliation
 - The hard task requires multi-step reasoning: parse a dropout alert, identify the forfeit winner, zero one account, and redistribute funds with correct arithmetic - all in a single atomic action
 - The reward function is strict: partial credit only where operationally meaningful, full credit only on exact correctness
-- The environment is stateful: each reset loads a fresh task snapshot from JSON; each step mutates live state
+- The environment is stateful: each reset generates a fresh scenario; each step mutates live state
+- The hard task uses dynamic team/balance selection — the agent cannot memorize a fixed answer
+- Progressive feedback is injected into alerts when the agent makes incorrect prize calculations
 
 The goal is to test whether an LLM agent can reliably operate as a backend automation layer in a high-stakes, time-sensitive domain.
 
@@ -50,6 +52,7 @@ class Observation(BaseModel):
     bracket_state: Dict[str, str]         # match_id -> winner_id or "pending"
     server_availability: Dict[str, bool]  # server_id -> True (available) / False (occupied)
     prize_pool_status: Dict[str, float]   # team_id -> prize amount in USD
+    scheduled_matches: Dict[str, str]     # match_id -> assigned server_id
 ```
 
 Example observation (Task 1):
@@ -135,32 +138,16 @@ The environment applies fields in this order: match updates, server reallocation
 
 **Task ID:** `task_medium_conflict`
 
-**Difficulty:** Medium. Requires identifying which server is occupied, choosing an available one from the observation, and composing a broadcast - two independent sub-tasks with partial credit.
+**Difficulty:** Medium. Requires identifying which server is occupied, choosing an available one from the observation, and composing a broadcast — two independent sub-tasks with partial credit. The overloaded server and target match are dynamically selected on each reset.
 
-**Scenario:** Match M2 is in overtime on `eu-west-1`. Match M3 is scheduled to start on the same server in 5 minutes. The agent must reallocate M3 to a free server and broadcast a delay notice.
+**Scenario:** A match is in overtime on a server. Another match is scheduled to start on the same server. The agent must reallocate the scheduled match to a free server and broadcast a delay notice.
 
-**Alert:**
+**Alert (example):**
 > "URGENT: Match M2 is in triple overtime on server 'eu-west-1'. Match M3 is scheduled to start on 'eu-west-1' in 5 minutes. Reallocate Match M3 to an available server and broadcast a delay message."
 
-**Initial State:**
-```json
-{
-  "server_availability": { "eu-west-1": false, "eu-west-2": true, "eu-west-3": true },
-  "bracket_state": { "M2": "pending", "M3": "pending" }
-}
-```
-
-**Required Action:**
-```json
-{
-  "reallocate_servers": { "M3": "eu-west-2" },
-  "broadcast_message": "Match M3 moved due to server conflict"
-}
-```
-
 **Grading:**
-- `+0.5` - M3 reallocated to an available server (`eu-west-2` or `eu-west-3`), not the occupied `eu-west-1`
-- `+0.5` - `broadcast_message` is non-empty
+- `+0.5` — target match reallocated to an available server (not the overloaded one)
+- `+0.5` — `broadcast_message` is non-empty
 - Max: `1.0`
 
 ---
@@ -169,45 +156,19 @@ The environment applies fields in this order: match updates, server reallocation
 
 **Task ID:** `task_hard_dropout`
 
-**Difficulty:** Hard. Requires multi-step reasoning: parse the dropout alert, determine the forfeit winner, zero one prize entry, and redistribute funds with exact arithmetic across three teams - all in a single action.
+**Difficulty:** Hard. Teams, balances, dropout team, and forfeit match are all dynamically selected on each reset. The agent must parse the alert, compute the correct prize redistribution (50% of dropout's balance split among active teams), and submit exact values.
 
-**Scenario:** Team_Liquid has withdrawn due to illness. Their scheduled opponent in M4 was Team_Solid. The agent must mark M4 as a forfeit win, zero Team_Liquid's prize allocation, and distribute their $3,000 evenly among the three remaining teams.
+**Scenario:** A team has withdrawn. The agent must mark their match as a forfeit win, zero their prize allocation, and redistribute 50% of their balance equally among the remaining active teams.
 
-**Alert:**
-> "CRITICAL: 'Team_Liquid' has dropped out of the tournament due to illness. Their opponent in Match M4 was 'Team_Solid'. Mark Match M4 as a forfeit win for 'Team_Solid'. You must also completely zero out Team_Liquid's prize pool and distribute their $3000 evenly among the 3 remaining active teams (Team_Solid, Team_Spirit, Team_Falcon)."
-
-**Initial State:**
-```json
-{
-  "bracket_state": { "M4": "pending", "M5": "pending" },
-  "prize_pool_status": {
-    "Team_Liquid": 3000.0,
-    "Team_Solid":  1000.0,
-    "Team_Spirit": 1000.0,
-    "Team_Falcon": 1000.0
-  }
-}
-```
-
-**Required Action:**
-```json
-{
-  "update_matches": { "M4": "Team_Solid" },
-  "adjust_prize_pool": {
-    "Team_Liquid": 0.0,
-    "Team_Solid":  2000.0,
-    "Team_Spirit": 2000.0,
-    "Team_Falcon": 2000.0
-  }
-}
-```
-
-**Math:** `3000 / 3 = 1000` additional per team. `1000 + 1000 = 2000` each.
+**Alert (example):**
+> "CRITICAL: 'Team_Blaze' has dropped out due to illness. Their opponent in M4 was 'Team_Echo'. Mark M4 as a forfeit win for 'Team_Echo'. Zero out Team_Blaze's prize and redistribute 50% of their $2400 equally among the 3 remaining teams. The organizer retains the other 50%."
 
 **Grading:**
-- `+0.4` - `update_matches["M4"] == "Team_Solid"`
-- `+0.6` - all four prize pool values match exactly (tolerance: +/- 0.01)
+- `+0.4` — correct forfeit winner in `update_matches`
+- `+0.6` — all prize pool values match expected solution exactly (tolerance ±0.02)
 - Max: `1.0`
+
+**Progressive feedback:** If the prize math is wrong, hints are injected into `active_alerts` on subsequent steps.
 
 ---
 
@@ -285,7 +246,7 @@ docker run -p 7860:7860 \
 ### Validate Submission
 
 ```bash
-python validate_submission.py https://huggingface.co/spaces/Debadrit/esports-tournament-env
+python validate_submission.py https://huggingface.co/spaces/COSMOSER/esports_env
 ```
 
 Expected output:
@@ -301,7 +262,7 @@ ALL CHECKS PASSED - Ready for submission!
 |--------|----------|-------------|
 | GET | `/` | JSON environment info |
 | GET | `/api` | Same as `/` (explicit JSON) |
-| POST | `/reset?task_id={id}` | Reset environment for a task |
+| POST | `/reset` | Reset environment for a task (JSON body: {task_id}) |
 | POST | `/step` | Execute an action, get observation + reward |
 | GET | `/state` | Current raw state dict |
 | GET | `/health` | Health check (`{"status": "healthy"}`) |
@@ -313,10 +274,12 @@ ALL CHECKS PASSED - Ready for submission!
 
 ```bash
 # Reset task
-curl -X POST "https://huggingface.co/spaces/Debadrit/esports-tournament-env/reset?task_id=task_easy_bracket"
+curl -X POST "https://huggingface.co/spaces/COSMOSER/esports_env/reset" \
+  -H "Content-Type: application/json" \
+  -d '{"task_id": "task_easy_bracket"}'
 
 # Execute action
-curl -X POST "https://huggingface.co/spaces/Debadrit/esports-tournament-env/step" \
+curl -X POST "https://huggingface.co/spaces/COSMOSER/esports_env/step" \
   -H "Content-Type: application/json" \
   -d '{"update_matches": {"M1": "Team_Alpha"}}'
 ```
@@ -349,7 +312,7 @@ Each task run produces exactly three line types:
 
 Rules:
 - One `[START]` per task run
-- One `[STEP]` per step taken (up to `max_steps=10`)
+- One `[STEP]` per step taken (up to `max_steps=5`)
 - One `[END]` per task run
 - Booleans lowercase (`true`/`false`)
 - Rewards formatted to 2 decimal places
@@ -385,11 +348,17 @@ esports-env/
 
 ## Changelog
 
-### v2.2 (Production)
-- Updated deployment URLs to use standard HF Spaces format
-- Cleaned up test files from deployment using `.openenvignore`
-- Optimized for production deployment and evaluation
-- Maintained full OpenEnv compliance and API compatibility
+### v3.0 (Current)
+- Dynamic task generation: hard task randomizes teams, balances, dropout team, and forfeit match on each reset
+- Medium task randomizes overloaded server and target match on each reset
+- Progressive feedback loop: incorrect prize math injects plain-text hints into `active_alerts` on subsequent steps
+- Hard 5-step episode limit enforced in environment
+- Fixed run_complete_task: single reset per episode, LLM sees updated observation each step
+- Robust JSON parser: strips comments, evaluates math expressions, retries on parse failure
+- LLM memory cleared on every `/reset` call via `global_chat_history`
+- Null/placeholder values stripped before Pydantic validation
+- UI redesigned with dark theme, step-by-step results, and OpenEnv STDOUT log display
+- Deployed to COSMOSER/esports_env
 
 ### v2.1 (Final)
 - Fixed iframe embedding: added `/web` route and absolute API URLs in JS
