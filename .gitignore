@@ -50,3 +50,9 @@ EVALUATION.md
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Test files and documentation (hidden from git and HF)
+test_*.py
+RANDOMIZATION_SUMMARY.md
+QUICK_REFERENCE.md
+ARCHITECTURE_DIAGRAM.md

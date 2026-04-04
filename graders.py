@@ -39,17 +39,25 @@ def grade_medium_conflict(action: Action, current_state: Dict[str, Any]) -> floa
     """
     score = 0.0
     
+    # Extract expected solution from state
+    expected = current_state.get("expected_solution", {})
+    target_match = expected.get("conflict_match")
+    valid_servers = expected.get("valid_servers", [])
+    
+    # Fallback to hardcoded values if expected_solution not present (backward compatibility)
+    if not target_match:
+        target_match = "M3"
+        valid_servers = ["eu-west-2", "eu-west-3"]
+    
     # +0.5 for correct server reallocation
-    if action.reallocate_servers:
-        if "M3" in action.reallocate_servers:
-            reallocated_server = action.reallocate_servers["M3"]
-            server_availability = current_state.get("server_availability", {})
-            available_servers = ["eu-west-2", "eu-west-3"]  # Available servers from current schema
-            
-            # Check if reallocated to an available server (not eu-west-1 which is occupied)
-            if (reallocated_server in available_servers and 
-                server_availability.get(reallocated_server, False)):
-                score += 0.5
+    if action.reallocate_servers and target_match in action.reallocate_servers:
+        reallocated_server = action.reallocate_servers[target_match]
+        server_availability = current_state.get("server_availability", {})
+        
+        # Check if reallocated to a valid available server
+        if (reallocated_server in valid_servers and 
+            server_availability.get(reallocated_server, False)):
+            score += 0.5
     
     # +0.5 for broadcast message
     if action.broadcast_message and len(action.broadcast_message.strip()) > 0:

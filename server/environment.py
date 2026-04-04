@@ -4,6 +4,7 @@ Core environment logic for the Esports Tournament Operations Manager.
 import json
 import copy
 import os
+import random
 from typing import Dict, Any, Tuple
 from models import Observation, Action
 from graders import grade_easy_bracket, grade_medium_conflict, grade_hard_dropout
@@ -36,13 +37,66 @@ class TournamentEnvironment:
         except Exception as e:
             raise ValueError(f"Error loading {json_file}: {e}")
     
+    def _generate_medium_task_state(self) -> Dict[str, Any]:
+        """Generate randomized state for medium task (server conflict resolution)."""
+        # Pool of possible matches and servers
+        pending_matches = ["M3", "M4", "M5", "M6"]
+        all_servers = ["eu-west-1", "us-east-1", "ap-south-1", "eu-west-2", "eu-west-3", "us-west-2"]
+        
+        # Randomly select conflict match and overloaded server
+        target_match = random.choice(pending_matches)
+        overloaded_server = random.choice(all_servers[:3])  # Choose from first 3 as overloaded
+        
+        # Select 1-2 available backup servers (not the overloaded one)
+        available_pool = [s for s in all_servers if s != overloaded_server]
+        num_backups = random.randint(1, 2)
+        backup_servers = random.sample(available_pool, num_backups)
+        
+        # Build server availability dict
+        server_availability = {overloaded_server: False}
+        for backup in backup_servers:
+            server_availability[backup] = True
+        
+        # Add some unavailable servers for realism
+        remaining_servers = [s for s in all_servers if s not in server_availability]
+        for server in remaining_servers[:2]:  # Add 2 more unavailable servers
+            server_availability[server] = False
+        
+        # Construct dynamic alert message
+        active_alerts = [
+            f"URGENT: Match M2 is in triple overtime on server '{overloaded_server}'. "
+            f"Match {target_match} is scheduled to start on '{overloaded_server}' in 5 minutes. "
+            f"Reallocate Match {target_match} to an available server and broadcast a delay message."
+        ]
+        
+        # Build state with hidden expected_solution
+        state = {
+            "current_time": "15:30:00",
+            "active_alerts": active_alerts,
+            "bracket_state": {
+                "M2": "in_progress",
+                target_match: "pending"
+            },
+            "server_availability": server_availability,
+            "prize_pool_status": {},
+            "expected_solution": {
+                "conflict_match": target_match,
+                "valid_servers": backup_servers
+            }
+        }
+        
+        return state
+    
     def reset(self, task_id: str) -> Observation:
         """Reset environment to initial state for specified task."""
-        # Load task data from JSON file
-        try:
-            initial_data = self._load_task_data(task_id)
-        except ValueError as e:
-            raise ValueError(f"Failed to load task {task_id}: {e}")
+        # Use dynamic generation for medium task, static JSON for others
+        if task_id == "task_medium_conflict":
+            initial_data = self._generate_medium_task_state()
+        else:
+            try:
+                initial_data = self._load_task_data(task_id)
+            except ValueError as e:
+                raise ValueError(f"Failed to load task {task_id}: {e}")
         
         self.current_task = task_id
         self.current_state = copy.deepcopy(initial_data)
@@ -77,13 +131,14 @@ class TournamentEnvironment:
         return copy.deepcopy(self.current_state)
     
     def _get_observation(self) -> Observation:
-        """Convert current state to Observation model."""
+        """Convert current state to Observation model (excludes expected_solution)."""
         return Observation(
             current_time=self.current_state.get("current_time", ""),
             active_alerts=self.current_state.get("active_alerts", []),
             bracket_state=self.current_state.get("bracket_state", {}),
             server_availability=self.current_state.get("server_availability", {}),
-            prize_pool_status=self.current_state.get("prize_pool_status", {})
+            prize_pool_status=self.current_state.get("prize_pool_status", {}),
+            scheduled_matches=self.current_state.get("scheduled_matches", {})
         )
     
     def _apply_action(self, action: Action) -> None:
