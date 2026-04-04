@@ -41,6 +41,39 @@ The goal is to test whether an LLM agent can reliably operate as a backend autom
 
 ---
 
+## Workflow Diagram
+
+```mermaid
+flowchart TD
+    A([Agent / LLM]) -->|POST /reset with task_id| B[TournamentEnvironment.reset]
+    B --> C{Task Type}
+
+    C -->|task_easy_bracket| D[Load static JSON\nMatch result alert]
+    C -->|task_medium_conflict| E[Generate dynamic scenario\nRandom server + match]
+    C -->|task_hard_dropout| F[Generate dynamic scenario\nRandom teams + balances]
+
+    D & E & F --> G[Return Observation\nactive_alerts · bracket_state\nserver_availability · prize_pool_status]
+
+    G -->|Agent reads observation| A
+    A -->|POST /step with Action JSON| H[TournamentEnvironment.step]
+
+    H --> I[Apply Action\nupdate_matches\nreallocate_servers\nadjust_prize_pool\nbroadcast_message]
+    I --> J[Grade Action\ngraders.py]
+
+    J --> K{Reward}
+    K -->|1.0 — correct| L([SUCCESS\ndone = true])
+    K -->|0.4 — partial\nforfeit correct\nprize wrong| M[Inject FEEDBACK hint\ninto active_alerts]
+    K -->|0.0 — wrong| M
+    M -->|step_count < 5| A
+    M -->|step_count >= 5| N([FAILED\nmax steps reached])
+
+    style L fill:#1a3a1a,color:#4caf50
+    style N fill:#3a1a1a,color:#f44336
+    style M fill:#3a2a1a,color:#ff9800
+```
+
+---
+
 ## Observation Space
 
 Each call to `/reset` or `/step` returns an `Observation` object with the following fields:
