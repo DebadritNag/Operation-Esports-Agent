@@ -50,3 +50,8 @@ EVALUATION.md
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Test files
+test_evaluator.py
+test_exploits.py
+validate_submission.py

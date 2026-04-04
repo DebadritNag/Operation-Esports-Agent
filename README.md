@@ -9,15 +9,15 @@ pinned: false
 
 # Esports Tournament Operations Manager
 
-**Version 2.1 (Final)** | OpenEnv-compliant agentic environment
+**Version 2.2 (Production)** | OpenEnv-compliant agentic environment
 
 | Link | URL |
 |------|-----|
 | HF Space | https://huggingface.co/spaces/Debadrit/esports-tournament-env |
-| Backend API | https://debadrit-esports-tournament-env.hf.space |
-| Web UI | https://debadrit-esports-tournament-env.hf.space/ui |
-| API Docs | https://debadrit-esports-tournament-env.hf.space/docs |
-| Health | https://debadrit-esports-tournament-env.hf.space/health |
+| Backend API | https://huggingface.co/spaces/Debadrit/esports-tournament-env |
+| Web UI | https://huggingface.co/spaces/Debadrit/esports-tournament-env/ui |
+| API Docs | https://huggingface.co/spaces/Debadrit/esports-tournament-env/docs |
+| Health | https://huggingface.co/spaces/Debadrit/esports-tournament-env/health |
 
 ---
 
@@ -285,7 +285,7 @@ docker run -p 7860:7860 \
 ### Validate Submission
 
 ```bash
-python validate_submission.py https://debadrit-esports-tournament-env.hf.space
+python validate_submission.py https://huggingface.co/spaces/Debadrit/esports-tournament-env
 ```
 
 Expected output:
@@ -313,10 +313,10 @@ ALL CHECKS PASSED - Ready for submission!
 
 ```bash
 # Reset task
-curl -X POST "https://debadrit-esports-tournament-env.hf.space/reset?task_id=task_easy_bracket"
+curl -X POST "https://huggingface.co/spaces/Debadrit/esports-tournament-env/reset?task_id=task_easy_bracket"
 
 # Execute action
-curl -X POST "https://debadrit-esports-tournament-env.hf.space/step" \
+curl -X POST "https://huggingface.co/spaces/Debadrit/esports-tournament-env/step" \
   -H "Content-Type: application/json" \
   -d '{"update_matches": {"M1": "Team_Alpha"}}'
 ```
@@ -384,6 +384,12 @@ esports-env/
 ---
 
 ## Changelog
+
+### v2.2 (Production)
+- Updated deployment URLs to use standard HF Spaces format
+- Cleaned up test files from deployment using `.openenvignore`
+- Optimized for production deployment and evaluation
+- Maintained full OpenEnv compliance and API compatibility
 
 ### v2.1 (Final)
 - Fixed iframe embedding: added `/web` route and absolute API URLs in JS
