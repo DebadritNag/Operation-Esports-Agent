@@ -12,6 +12,7 @@ class Observation(BaseModel):
     bracket_state: Dict[str, str] = Field(default_factory=dict, description="Match ID to winner ID or 'pending'")
     server_availability: Dict[str, bool] = Field(default_factory=dict, description="Server ID to availability status")
     prize_pool_status: Dict[str, float] = Field(default_factory=dict, description="Team ID to prize pool amount")
+    scheduled_matches: Dict[str, str] = Field(default_factory=dict, description="Match ID to currently assigned server ID (e.g., {'M3': 'eu-west-2'})")
 
 
 class Action(BaseModel):

@@ -5,11 +5,5 @@ __pycache__/
 .gitignore
 test_exploits.py
 test_evaluator.py
-test_randomization.py
-test_observation_security.py
-test_integration.py
-test_graders_unit.py
+validate_submission.py
 outputs/
-RANDOMIZATION_SUMMARY.md
-QUICK_REFERENCE.md
-ARCHITECTURE_DIAGRAM.md
