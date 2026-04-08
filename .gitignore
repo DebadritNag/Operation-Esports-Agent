@@ -45,6 +45,7 @@ outputs/
 uv.lock
 *.log
 EVALUATION.md
+SCORING_SYSTEM.md
 
 # Test artifacts
 .pytest_cache/
@@ -55,3 +56,7 @@ htmlcov/
 test_evaluator.py
 test_exploits.py
 validate_submission.py
+
+# Debug files
+debug_*.py
+test_reward_scale.py

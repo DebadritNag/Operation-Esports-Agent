@@ -220,16 +220,16 @@ All three tasks solved in a single step. The model correctly parsed the alert te
 **STDOUT output (baseline run):**
 ```
 [START] task=task_easy_bracket env=esports_env model=meta-llama/Meta-Llama-3-8B-Instruct
-[STEP] step=1 action={"update_matches":{"M1":"Team_Alpha"}} reward=1.00 done=true error=null
-[END] success=true steps=1 rewards=1.00
+[STEP] step=1 action={"update_matches":{"M1":"Team_Alpha"}} reward=0.87 done=true error=null
+[END] success=true steps=1 rewards=0.87
 
 [START] task=task_medium_conflict env=esports_env model=meta-llama/Meta-Llama-3-8B-Instruct
-[STEP] step=1 action={"reallocate_servers":{"M3":"eu-west-2"},"broadcast_message":"Match M3 moved to eu-west-2 due to server conflict"} reward=1.00 done=true error=null
-[END] success=true steps=1 rewards=1.00
+[STEP] step=1 action={"reallocate_servers":{"M3":"eu-west-2"},"broadcast_message":"Match M3 moved to eu-west-2 due to server conflict"} reward=0.72 done=true error=null
+[END] success=true steps=1 rewards=0.72
 
 [START] task=task_hard_dropout env=esports_env model=meta-llama/Meta-Llama-3-8B-Instruct
-[STEP] step=1 action={"update_matches":{"M4":"Team_Solid"},"adjust_prize_pool":{"Team_Liquid":0.0,"Team_Solid":2000.0,"Team_Spirit":2000.0,"Team_Falcon":2000.0}} reward=1.00 done=true error=null
-[END] success=true steps=1 rewards=1.00
+[STEP] step=1 action={"update_matches":{"M4":"Team_Solid"},"adjust_prize_pool":{"Team_Liquid":0.0,"Team_Solid":2000.0,"Team_Spirit":2000.0,"Team_Falcon":2000.0}} reward=0.52 done=true error=null
+[END] success=true steps=1 rewards=0.52
 ```
 
 ---

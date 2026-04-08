@@ -12,4 +12,9 @@ outputs/
 uv.lock
 EVALUATION.md
 DEPLOYMENT_SUMMARY.md
+SCORING_SYSTEM.md
 *.md.bak
+
+# Debug files
+debug_*.py
+test_reward_scale.py

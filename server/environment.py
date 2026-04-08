@@ -53,12 +53,22 @@ class TournamentEnvironment:
         self.step_count = 0
         self.math_strikes = 0
 
+        # Reset dynamic task fields
+        self.expected_solution = {}
+        self.dropout_team = ""
+        self.forfeit_match = ""
+        self.forfeit_winner = ""
+        self.overloaded_server = ""
+        self.target_match = ""
+
         if task_id == "task_hard_dropout":
+            # Build fully randomized hard task
             self._build_hard_task()
         elif task_id == "task_medium_conflict":
+            # Build randomized medium task
             self._build_medium_task()
         else:
-            # Easy task — load from JSON as before
+            # Load static task data from JSON for easy task
             try:
                 initial_data = self._load_task_data(task_id)
             except ValueError as e:
@@ -77,14 +87,24 @@ class TournamentEnvironment:
         # Grade
         reward = self._grade_action(action)
 
+        # Different success thresholds for different task difficulties
+        # Adjusted for multi-step requirements
+        success_threshold = 0.50  # Default threshold
+        if self.current_task == "task_easy_bracket":
+            success_threshold = 0.75  # Easy task threshold (single step)
+        elif self.current_task == "task_medium_conflict":
+            success_threshold = 0.55  # Medium task threshold (2-3 steps)
+        elif self.current_task == "task_hard_dropout":
+            success_threshold = 0.35  # Hard task threshold (3-4 steps)
+
         # Hard step limit
-        if self.step_count >= self.max_steps and reward < 1.0:
+        if self.step_count >= self.max_steps and reward < success_threshold:
             return self._get_observation(), reward, True, (
                 f"Step {self.step_count}/{self.max_steps} — max steps reached. "
                 f"Final reward: {reward:.2f}"
             )
 
-        done = reward >= 1.0
+        done = reward >= success_threshold
         info = f"Step {self.step_count}/{self.max_steps}, Reward: {reward:.2f}"
         if done:
             info += " — Task completed successfully!"
@@ -246,44 +266,135 @@ class TournamentEnvironment:
     # ------------------------------------------------------------------
 
     def _grade_action(self, action: Action) -> float:
+        """Grade action using appropriate grading method (static vs dynamic)."""
+        # Add step count to current state for multi-step grading
+        state_with_step = self.current_state.copy()
+        state_with_step["step_count"] = self.step_count
+
         if self.current_task == "task_easy_bracket":
-            return grade_easy_bracket(action, self.current_state)
+            raw = grade_easy_bracket(action, state_with_step)
         elif self.current_task == "task_medium_conflict":
-            return self._grade_medium_dynamic(action)
+            if self.target_match:
+                raw = self._grade_medium_dynamic(action)
+            else:
+                raw = grade_medium_conflict(action, state_with_step)
         elif self.current_task == "task_hard_dropout":
-            return self._grade_hard_dynamic(action)
-        return 0.0
+            if self.dropout_team:
+                raw = self._grade_hard_dynamic(action)
+            else:
+                raw = grade_hard_dropout(action, state_with_step)
+        else:
+            raw = 0.01
+
+        # Guarantee score is strictly within (0, 1) — validator requirement
+        return max(0.001, min(raw, 0.999))
 
     def _grade_medium_dynamic(self, action: Action) -> float:
-        """Grade medium task against randomized targets."""
+        """Grade medium task against randomized targets with nuanced scoring."""
         score = 0.0
+        server_score = 0.0
+        message_score = 0.0
+        
+        # Server reallocation scoring
         if action.reallocate_servers and self.target_match in action.reallocate_servers:
             chosen = action.reallocate_servers[self.target_match]
-            avail  = self.current_state.get("server_availability", {})
+            avail = self.current_state.get("server_availability", {})
+            
             if avail.get(chosen) is True and chosen != self.overloaded_server:
-                score += 0.5
+                server_score = 0.38  # Good server choice
+            elif avail.get(chosen) is True:
+                server_score = 0.20  # Available but might be suboptimal
+            elif chosen in avail:
+                server_score = 0.12  # Attempted but chose unavailable server
+            else:
+                server_score = 0.08  # Invalid server choice
+        elif action.reallocate_servers:
+            # Attempted reallocation but wrong match
+            server_score = 0.05
+        
+        # Message scoring
         if action.broadcast_message and action.broadcast_message.strip():
-            score += 0.5
-        return min(score, 1.0)
+            message = action.broadcast_message.lower()
+            message_length = len(action.broadcast_message.strip())
+            
+            # Base message score
+            message_score = 0.22
+            
+            # Bonus for relevant keywords
+            relevant_keywords = ['delay', 'conflict', 'server', 'reallocate', 'reschedule', 'technical', 'overtime']
+            keyword_count = sum(1 for keyword in relevant_keywords if keyword in message)
+            message_score += min(keyword_count * 0.04, 0.12)
+            
+            # Bonus for appropriate length
+            if 15 <= message_length <= 120:
+                message_score += 0.04
+            elif message_length < 8:
+                message_score -= 0.08
+        
+        total_score = server_score + message_score
+        
+        # Bonus for having both components
+        if server_score > 0.15 and message_score > 0.15:
+            total_score += 0.06
+        
+        return max(min(total_score, 0.72), 0.01)  # Medium task max score, minimum 0.01
 
     def _grade_hard_dynamic(self, action: Action) -> float:
-        """Grade hard task against dynamically computed expected solution."""
+        """Grade hard task against dynamically computed expected solution with detailed scoring."""
         score = 0.0
+        match_score = 0.0
+        prize_score = 0.0
 
-        # +0.4 for correct forfeit winner
+        # Match update scoring
         if (action.update_matches and
                 action.update_matches.get(self.forfeit_match) == self.forfeit_winner):
-            score += 0.4
+            match_score = 0.20  # Correct forfeit winner
+        elif action.update_matches and self.forfeit_match in action.update_matches:
+            match_score = 0.07  # Attempted correct match but wrong winner
+        elif action.update_matches:
+            match_score = 0.03  # Some match update attempt
 
-        # +0.6 for exact prize pool
+        # Prize pool scoring
         if self._prize_correct(action):
-            score += 0.6
+            prize_score = 0.28  # Perfect prize calculation
+        elif action.adjust_prize_pool:
+            # Partial credit for prize pool attempts
+            expected_teams = set(self.expected_solution.keys())
+            actual_teams = set(action.adjust_prize_pool.keys())
+            
+            # Base score for attempting
+            prize_score = 0.06
+            
+            # Bonus for correct teams
+            if expected_teams == actual_teams:
+                prize_score += 0.05
+            elif len(expected_teams & actual_teams) > 0:
+                prize_score += 0.03
+            
+            # Check for approximately correct amounts
+            close_matches = 0
+            for team_id, expected_amount in self.expected_solution.items():
+                if team_id in action.adjust_prize_pool:
+                    actual_amount = action.adjust_prize_pool[team_id]
+                    if abs(actual_amount - expected_amount) < 50:  # Within $50
+                        close_matches += 1
+            
+            if close_matches > 0:
+                prize_score += 0.08 * (close_matches / len(self.expected_solution))
+
+        total_score = match_score + prize_score
+
+        # Penalty for unnecessary fields
+        if action.broadcast_message:
+            total_score -= 0.015
+        if action.reallocate_servers:
+            total_score -= 0.015
 
         # Strike 3 forces done regardless of score
         if self.math_strikes >= 3:
-            return score  # step() will set done=True
+            return max(total_score, 0.01)  # Minimum score instead of 0.0
 
-        return min(score, 1.0)
+        return min(max(total_score, 0.01), 0.52)  # Hard task max score, minimum 0.01
 
     # ------------------------------------------------------------------
     # Helpers

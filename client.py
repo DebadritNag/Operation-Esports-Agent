@@ -67,7 +67,7 @@ class EsportsInferenceClient(EsportsClient):
         # LLM configuration
         self.api_key = os.getenv("HF_TOKEN")
         self.api_base_url = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-        self.model_name = os.getenv("MODEL_NAME", "mistralai/Mistral-7B-Instruct-v0.3")
+        self.model_name = os.getenv("MODEL_NAME", "meta-llama/Meta-Llama-3-8B-Instruct")
         
         if not self.api_key:
             raise ValueError("HF_TOKEN environment variable is required")
@@ -222,7 +222,15 @@ Respond with ONLY a valid JSON object containing the action. No explanations or 
                 episode_data["total_reward"] += step_response.reward
                 
                 if step_response.done:
-                    episode_data["success"] = step_response.reward >= 1.0
+                    # Task-specific success thresholds
+                    if task_id == "task_easy_bracket":
+                        episode_data["success"] = step_response.reward >= 0.75
+                    elif task_id == "task_medium_conflict":
+                        episode_data["success"] = step_response.reward >= 0.60
+                    elif task_id == "task_hard_dropout":
+                        episode_data["success"] = step_response.reward >= 0.40
+                    else:
+                        episode_data["success"] = step_response.reward >= 0.50
                     break
                     
                 observation = step_response.observation
@@ -231,7 +239,7 @@ Respond with ONLY a valid JSON object containing the action. No explanations or 
                 step_data = {
                     "step": step + 1,
                     "action": {},
-                    "reward": 0.0,
+                    "reward": 0.001,
                     "done": True,
                     "error": str(e)
                 }

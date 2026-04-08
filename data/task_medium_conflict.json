@@ -1,6 +1,11 @@
 {
   "current_time": "15:30:00",
-  "active_alerts": ["URGENT: Match M2 is in triple overtime on server 'eu-west-1'. Match M3 is scheduled to start on 'eu-west-1' in 5 minutes. Reallocate Match M3 to an available server and broadcast a delay message."],
+  "active_alerts": [
+    "URGENT: Match M2 is in triple overtime on server 'eu-west-1'. Match M3 is scheduled to start on 'eu-west-1' in 5 minutes but the server is unavailable.",
+    "TECHNICAL: Available backup servers: eu-west-2 (load: 15%), eu-west-3 (load: 22%). You must reallocate Match M3 to prevent tournament delays.",
+    "COMMUNICATION: Teams Team_Echo and Team_Nova are waiting for Match M3. A broadcast message explaining the situation and new timeline is required.",
+    "VERIFICATION: After reallocation, confirm the new server assignment and verify all systems are ready for the match."
+  ],
   "bracket_state": {
     "M2": "in_progress",
     "M3": "pending"
@@ -10,5 +15,11 @@
     "eu-west-2": true,
     "eu-west-3": true
   },
-  "prize_pool_status": {}
+  "prize_pool_status": {
+    "Team_Echo": 1500.0,
+    "Team_Nova": 1500.0
+  },
+  "scheduled_matches": {
+    "M3": "eu-west-1"
+  }
 }

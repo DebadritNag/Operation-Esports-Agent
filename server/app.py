@@ -3,7 +3,7 @@ FastAPI application for the Esports Tournament Operations Manager environment.
 """
 import os
 import sys
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
@@ -140,24 +140,32 @@ async def web_probe():
 
 
 @app.post("/reset", response_model=Observation)
-async def reset_environment(request: Optional[ResetRequest] = None):
+async def reset_environment(request: Optional[ResetRequest] = None, task_id: Optional[str] = Query(None)):
     """
     Reset the environment to initial state for specified task.
     
     Args:
         request: Optional ResetRequest containing task_id (defaults to task_easy_bracket)
+        task_id: Optional query parameter for task_id
     
     Returns:
         Initial observation for the task
     """
     try:
         global global_chat_history
-        task_id = request.task_id if request else "task_easy_bracket"
+        
+        # Priority: query parameter > request body > default
+        if task_id:
+            final_task_id = task_id
+        elif request:
+            final_task_id = request.task_id
+        else:
+            final_task_id = "task_easy_bracket"
 
         # Clear LLM chat history so the agent starts with blank memory
         global_chat_history = []
 
-        observation = env.reset(task_id)
+        observation = env.reset(final_task_id)
         return observation
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -348,6 +356,10 @@ Based on the active_alerts and current state, respond with the correct action JS
                 # 9. Collapse multiple whitespace/newlines inside strings
                 action_text = re.sub(r'\s+', ' ', action_text)
 
+                print(f"[DEBUG] cleaned JSON: {action_text[:400]}", flush=True)
+
+                action_dict = _json.loads(action_text)
+
                 # Strip null values and empty dicts to avoid Pydantic validation errors
                 action_dict = {
                     k: v for k, v in action_dict.items()
@@ -362,10 +374,6 @@ Based on the active_alerts and current state, respond with the correct action JS
                         }
                         if not action_dict[k]:
                             del action_dict[k]
-
-                print(f"[DEBUG] cleaned JSON: {action_text[:400]}", flush=True)
-
-                action_dict = _json.loads(action_text)
             except Exception as llm_err:
                 # Retry once with a strict repair prompt
                 try:
@@ -384,8 +392,8 @@ Based on the active_alerts and current state, respond with the correct action JS
                         repair_text = repair_text[s2:e2+1]
                     action_dict = _json.loads(repair_text)
                 except Exception:
-                    steps.append({"step": step_num, "action": "{}", "reward": 0.0, "done": True, "error": str(llm_err), "info": ""})
-                    rewards.append(0.0)
+                    steps.append({"step": step_num, "action": "{}", "reward": 0.001, "done": True, "error": str(llm_err), "info": ""})
+                    rewards.append(0.001)
                     success = False
                     break
 
@@ -407,8 +415,17 @@ Based on the active_alerts and current state, respond with the correct action JS
                 "info": info,
             })
 
-            if done or reward >= 1.0:
-                success = reward >= 1.0
+            # Task-specific success thresholds
+            success_threshold = 0.50  # Default
+            if task_id == "task_easy_bracket":
+                success_threshold = 0.75
+            elif task_id == "task_medium_conflict":
+                success_threshold = 0.60
+            elif task_id == "task_hard_dropout":
+                success_threshold = 0.40
+
+            if done or reward >= success_threshold:
+                success = reward >= success_threshold
                 break
 
         # Build raw output string matching OpenEnv STDOUT format
@@ -500,10 +517,13 @@ async def web_interface():
             <li>Review the step-by-step execution and final reward in the output panel</li>
             <li>Check the OpenEnv STDOUT log at the bottom of each result for compliance output</li>
         </ol>
+        <p style="color:#a0a0b0;font-size:12px;margin-top:10px;">
+            <strong>Scoring System:</strong> Easy (0.75-0.87, 1 step), Medium (0.55-0.72, 2-3 steps), Hard (0.35-0.52, 3-4 steps)
+        </p>
     </div>
 
     <div class="task-section" id="task-easy-bracket">
-        <div class="task-title">Task 1: Easy &mdash; Match Processing</div>
+        <div class="task-title">Task 1: Easy &mdash; Match Processing <span style="color:#28a745;font-size:12px;">[Max: 0.87, Success: 0.75+] (1 step)</span></div>
         <div class="task-desc">Read match results from alerts and update bracket winners</div>
         <div class="controls">
             <button class="btn-primary" onclick="resetTask('task_easy_bracket')">Reset Task</button>
@@ -514,7 +534,7 @@ async def web_interface():
     </div>
 
     <div class="task-section" id="task-medium-conflict">
-        <div class="task-title">Task 2: Medium &mdash; Server Conflict</div>
+        <div class="task-title">Task 2: Medium &mdash; Server Conflict <span style="color:#ffc107;font-size:12px;">[Max: 0.72, Success: 0.55+] (2-3 steps)</span></div>
         <div class="task-desc">Handle server conflicts and reallocate resources during live matches</div>
         <div class="controls">
             <button class="btn-primary" onclick="resetTask('task_medium_conflict')">Reset Task</button>
@@ -525,7 +545,7 @@ async def web_interface():
     </div>
 
     <div class="task-section" id="task-hard-dropout">
-        <div class="task-title">Task 3: Hard &mdash; Team Dropout</div>
+        <div class="task-title">Task 3: Hard &mdash; Team Dropout <span style="color:#e94560;font-size:12px;">[Max: 0.52, Success: 0.35+] (3-4 steps)</span></div>
         <div class="task-desc">Manage team dropouts, forfeit rulings, and prize pool redistribution</div>
         <div class="controls">
             <button class="btn-primary" onclick="resetTask('task_hard_dropout')">Reset Task</button>
@@ -608,20 +628,59 @@ async def web_interface():
             });
             const d = await r.json();
             if (r.ok) {
-                const sc = d.success ? 'success' : 'error';
-                const lbl = d.success ? '&#10003; SUCCESS' : '&#10007; FAILED';
+                // Determine overall success color based on task-specific thresholds
+                let overallSuccessThreshold = 0.50;
+                let overallMaxScore = 0.99;
+                if (taskId === 'task_easy_bracket') {
+                    overallSuccessThreshold = 0.75;
+                    overallMaxScore = 0.87;
+                } else if (taskId === 'task_medium_conflict') {
+                    overallSuccessThreshold = 0.55;
+                    overallMaxScore = 0.72;
+                } else if (taskId === 'task_hard_dropout') {
+                    overallSuccessThreshold = 0.35;
+                    overallMaxScore = 0.52;
+                }
+                
+                const sc = d.total_reward >= overallSuccessThreshold ? 'success' : 'error';
+                const lbl = d.total_reward >= overallSuccessThreshold ? '&#10003; SUCCESS' : '&#10007; FAILED';
                 let steps = '';
                 d.steps.forEach(s => {
-                    const c = s.reward >= 1.0 ? 'success' : s.reward > 0 ? 'warning' : 'error';
+                    // Task-specific success thresholds and max scores for color coding
+                    let successThreshold = 0.50; // Default
+                    let maxScore = 0.99; // Default
+                    if (taskId === 'task_easy_bracket') {
+                        successThreshold = 0.75;
+                        maxScore = 0.87;
+                    } else if (taskId === 'task_medium_conflict') {
+                        successThreshold = 0.55;
+                        maxScore = 0.72;
+                    } else if (taskId === 'task_hard_dropout') {
+                        successThreshold = 0.35;
+                        maxScore = 0.52;
+                    }
+                    
+                    // Color coding based on performance relative to task difficulty
+                    let c = 'error';
+                    if (s.reward >= successThreshold) {
+                        c = 'success'; // Green for success threshold
+                    } else if (s.reward >= successThreshold * 0.7) {
+                        c = 'warning'; // Yellow for partial success
+                    } else if (s.reward > 0) {
+                        c = 'info'; // Blue for some attempt
+                    }
+                    // Red (error) for zero score
+                    
                     steps += `<div class="step-block">`;
-                    steps += `<span class="status ${c}">Step ${s.step} &mdash; Reward: ${s.reward.toFixed(2)} | Done: ${s.done}</span>`;
+                    steps += `<span class="status ${c}">Step ${s.step} &mdash; Reward: ${s.reward.toFixed(2)}/${maxScore.toFixed(2)} | Done: ${s.done}</span>`;
                     steps += `Action: ${s.action}\\n`;
                     if (s.info)  steps += `Info: ${s.info}\\n`;
                     if (s.error) steps += `<span class="status strike">&#9889; ${s.error}</span>\\n`;
                     steps += `</div>`;
                 });
+                
                 out.innerHTML =
-                    `<span class="status ${sc}">${lbl} &mdash; Reward: ${d.total_reward.toFixed(2)} | Steps: ${d.step_count} | Model: ${d.start_info.model}</span>\\n\\n` +
+                    `<span class="status ${sc}">${lbl} &mdash; Reward: ${d.total_reward.toFixed(2)}/${overallMaxScore.toFixed(2)} | Steps: ${d.step_count} | Model: ${d.start_info.model}</span>\\n\\n` +
                     `<strong>Step-by-Step:</strong>\\n${steps}\\n` +
                     `<strong>OpenEnv STDOUT:</strong>\\n<span class="raw">${d.raw_output}</span>`;
                 setActive(taskId, false);
