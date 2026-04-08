@@ -277,14 +277,16 @@ Respond with ONLY a valid JSON object containing the action. No explanations or 
                     # Execute action
                     step_response = self.step_environment(action)
                     observation = step_response["observation"]
-                    reward = step_response["reward"]
+                    reward = float(step_response["reward"])
+                    # Clamp client-side: validator requires strictly (0, 1)
+                    reward = max(0.001, min(reward, 0.999))
                     done = step_response["done"]
                     
                     rewards.append(reward)
                     
-                    # Line 2: [STEP] step=<n> action=<action_json_string_no_newlines> reward=<0.00> done=<true|false> error=<msg|null>
+                    # Line 2: [STEP] step=<n> action=<action_json_string_no_newlines> reward=<value> done=<true|false> error=<msg|null>
                     done_str = "true" if done else "false"
-                    print(f"[STEP] step={step} action={action_json_str} reward={reward:.2f} done={done_str} error=null")
+                    print(f"[STEP] step={step} action={action_json_str} reward={reward:.4f} done={done_str} error=null")
                     
                     if done:
                         # Different success thresholds for different tasks
@@ -302,21 +304,21 @@ Respond with ONLY a valid JSON object containing the action. No explanations or 
                     # LLM or environment error - log error and exit episode
                     action_json_str = json.dumps({}, separators=(',', ':'))
                     error_msg = str(e).replace('\n', ' ').replace('\r', ' ')
-                    print(f"[STEP] step={step} action={action_json_str} reward=0.001 done=true error={error_msg}")
+                    print(f"[STEP] step={step} action={action_json_str} reward=0.0010 done=true error={error_msg}")
                     rewards.append(0.001)
                     success = False
                     break
             
             # Line 3: [END] success=<true|false> steps=<n> rewards=<r1,r2,...,rn>
             success_str = "true" if success else "false"
-            rewards_str = ",".join([f"{r:.2f}" for r in rewards])
+            rewards_str = ",".join([f"{r:.4f}" for r in rewards])
             print(f"[END] success={success_str} steps={len(rewards)} rewards={rewards_str}")
             
         except Exception as e:
             # Handle reset or other initialization errors
             error_msg = str(e).replace('\n', ' ').replace('\r', ' ')
-            print(f"[STEP] step=1 action={{}} reward=0.001 done=true error={error_msg}")
-            print(f"[END] success=false steps=1 rewards=0.001")
+            print(f"[STEP] step=1 action={{}} reward=0.0010 done=true error={error_msg}")
+            print(f"[END] success=false steps=1 rewards=0.0010")
     
     def run_all_tasks(self):
         """Run all three tasks with strict STDOUT formatting."""
