@@ -26,6 +26,6 @@ class Action(BaseModel):
 class StepResponse(BaseModel):
     """Response from environment step containing observation, reward, and status."""
     observation: Observation = Field(..., description="Current environment observation")
-    reward: float = Field(..., gt=0.0, lt=1.0, description="Reward strictly between 0 and 1 (exclusive). Task-specific maximums: Easy: 0.87, Medium: 0.72, Hard: 0.52")
+    reward: float = Field(..., description="Reward strictly between 0 and 1 (exclusive). Task-specific maximums: Easy: 0.87, Medium: 0.72, Hard: 0.52")
     done: bool = Field(..., description="Whether the episode is complete")
     info: str = Field(..., description="Additional information about the step")

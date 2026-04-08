@@ -190,6 +190,9 @@ async def step_environment(action: Action):
         
         observation, reward, done, info = env.step(action)
         
+        # Guarantee reward is strictly within (0, 1) — validator requirement
+        reward = max(0.001, min(float(reward), 0.999))
+        
         return StepResponse(
             observation=observation,
             reward=reward,
@@ -401,6 +404,8 @@ Based on the active_alerts and current state, respond with the correct action JS
             from models import Action
             action_obj = Action(**action_dict)
             observation, reward, done, info = env.step(action_obj)
+            # Clamp reward strictly within (0, 1)
+            reward = max(0.001, min(float(reward), 0.999))
             # Always use the latest observation so LLM sees strike hints
             obs_dict = observation.model_dump()
             rewards.append(reward)
@@ -433,9 +438,9 @@ Based on the active_alerts and current state, respond with the correct action JS
         for s in steps:
             done_str = "true" if s["done"] else "false"
             err_str  = s["error"] if s["error"] else "null"
-            raw_lines.append(f"[STEP] step={s['step']} action={s['action']} reward={s['reward']:.2f} done={done_str} error={err_str}")
+            raw_lines.append(f"[STEP] step={s['step']} action={s['action']} reward={s['reward']:.4f} done={done_str} error={err_str}")
         success_str  = "true" if success else "false"
-        rewards_str  = ",".join(f"{r:.2f}" for r in rewards)
+        rewards_str  = ",".join(f"{r:.4f}" for r in rewards)
         raw_lines.append(f"[END] success={success_str} steps={len(rewards)} rewards={rewards_str}")
 
         return {
