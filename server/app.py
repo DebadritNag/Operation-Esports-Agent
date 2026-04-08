@@ -3,6 +3,7 @@ FastAPI application for the Esports Tournament Operations Manager environment.
 """
 import os
 import sys
+import json
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -221,13 +222,196 @@ async def get_state() -> Dict[str, Any]:
 
 @app.get("/health")
 async def health_check():
-    """
-    Health check endpoint.
-    
-    Returns:
-        Health status
-    """
+    """Health check endpoint."""
     return {"status": "healthy"}
+
+
+@app.get("/metadata")
+async def metadata():
+    """OpenEnv metadata endpoint — returns environment name and description."""
+    return {
+        "name": "esports_env",
+        "description": "Esports Tournament Operations Manager — OpenEnv environment for tournament management operations",
+        "version": "1.0.0",
+        "tasks": [
+            {
+                "id": "task_easy_bracket",
+                "name": "Match Processing",
+                "description": "Read match results and update bracket state",
+                "difficulty": "easy"
+            },
+            {
+                "id": "task_medium_conflict",
+                "name": "Server Conflict Resolution",
+                "description": "Handle server conflicts during overtime matches",
+                "difficulty": "medium"
+            },
+            {
+                "id": "task_hard_dropout",
+                "name": "Team Dropout Management",
+                "description": "Manage team dropouts and prize pool recalculation",
+                "difficulty": "hard"
+            }
+        ],
+        "reward_range": [0.001, 0.999]
+    }
+
+
+@app.get("/schema")
+async def schema():
+    """OpenEnv schema endpoint — returns action, observation, and state schemas."""
+    return {
+        "action": {
+            "type": "object",
+            "properties": {
+                "update_matches": {
+                    "type": "object",
+                    "description": "Match ID to winner ID updates",
+                    "additionalProperties": {"type": "string"}
+                },
+                "reallocate_servers": {
+                    "type": "object",
+                    "description": "Match ID to server ID reallocation",
+                    "additionalProperties": {"type": "string"}
+                },
+                "broadcast_message": {
+                    "type": "string",
+                    "description": "Broadcast message to send"
+                },
+                "adjust_prize_pool": {
+                    "type": "object",
+                    "description": "Team ID to prize pool adjustment",
+                    "additionalProperties": {"type": "number"}
+                }
+            }
+        },
+        "observation": {
+            "type": "object",
+            "properties": {
+                "current_time": {"type": "string"},
+                "active_alerts": {"type": "array", "items": {"type": "string"}},
+                "bracket_state": {"type": "object", "additionalProperties": {"type": "string"}},
+                "server_availability": {"type": "object", "additionalProperties": {"type": "boolean"}},
+                "prize_pool_status": {"type": "object", "additionalProperties": {"type": "number"}},
+                "scheduled_matches": {"type": "object", "additionalProperties": {"type": "string"}}
+            }
+        },
+        "state": {
+            "type": "object",
+            "properties": {
+                "current_time": {"type": "string"},
+                "active_alerts": {"type": "array", "items": {"type": "string"}},
+                "bracket_state": {"type": "object", "additionalProperties": {"type": "string"}},
+                "server_availability": {"type": "object", "additionalProperties": {"type": "boolean"}},
+                "prize_pool_status": {"type": "object", "additionalProperties": {"type": "number"}},
+                "scheduled_matches": {"type": "object", "additionalProperties": {"type": "string"}}
+            }
+        }
+    }
+
+
+@app.post("/mcp")
+async def mcp_endpoint(request: Dict[str, Any]):
+    """OpenEnv MCP endpoint — JSON-RPC 2.0 interface for tool-based access."""
+    method = request.get("method", "")
+    req_id = request.get("id", 1)
+    params = request.get("params", {})
+
+    if method == "initialize":
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "esports_env", "version": "1.0.0"}
+            }
+        }
+
+    if method == "tools/list":
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {
+                "tools": [
+                    {
+                        "name": "reset",
+                        "description": "Reset the environment for a specific task",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {"task_id": {"type": "string"}},
+                            "required": ["task_id"]
+                        }
+                    },
+                    {
+                        "name": "step",
+                        "description": "Execute an action in the environment",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "update_matches": {"type": "object"},
+                                "reallocate_servers": {"type": "object"},
+                                "broadcast_message": {"type": "string"},
+                                "adjust_prize_pool": {"type": "object"}
+                            }
+                        }
+                    },
+                    {
+                        "name": "state",
+                        "description": "Get the current environment state",
+                        "inputSchema": {"type": "object", "properties": {}}
+                    }
+                ]
+            }
+        }
+
+    if method == "tools/call":
+        tool_name = params.get("name", "")
+        tool_args = params.get("arguments", {})
+
+        if tool_name == "reset":
+            try:
+                task_id = tool_args.get("task_id", "task_easy_bracket")
+                observation = env.reset(task_id)
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {"content": [{"type": "text", "text": observation.model_dump_json()}]}
+                }
+            except Exception as e:
+                return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32000, "message": str(e)}}
+
+        if tool_name == "step":
+            try:
+                action = Action(**tool_args)
+                observation, reward, done, info = env.step(action)
+                reward = max(0.001, min(float(reward), 0.999))
+                result = {"observation": observation.model_dump(), "reward": reward, "done": done, "info": info}
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {"content": [{"type": "text", "text": json.dumps(result)}]}
+                }
+            except Exception as e:
+                return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32000, "message": str(e)}}
+
+        if tool_name == "state":
+            try:
+                state = env.get_state()
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {"content": [{"type": "text", "text": json.dumps(state)}]}
+                }
+            except Exception as e:
+                return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32000, "message": str(e)}}
+
+    # Unknown method
+    return {
+        "jsonrpc": "2.0",
+        "id": req_id,
+        "error": {"code": -32601, "message": f"Method not found: {method}"}
+    }
 
 
 @app.post("/run_task")

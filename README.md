@@ -288,6 +288,9 @@ docker run -p 7860:7860 \
 |--------|----------|-------------|
 | GET | `/` | JSON environment info |
 | GET | `/api` | Same as `/` (explicit JSON) |
+| GET | `/metadata` | OpenEnv metadata (name, description, tasks, reward_range) |
+| GET | `/schema` | OpenEnv schema (action, observation, state JSON schemas) |
+| POST | `/mcp` | OpenEnv MCP JSON-RPC 2.0 interface |
 | POST | `/reset` | Reset environment for a task (JSON body: `{"task_id": "..."}`) |
 | POST | `/step` | Execute an action, get observation + reward |
 | GET | `/state` | Current raw state dict |
@@ -386,6 +389,7 @@ esports-env/
 ## Changelog
 
 ### v3.1 (Current)
+- Added `/metadata`, `/schema`, and `/mcp` endpoints required by OpenEnv HTTP/1.x standard
 - Reward range fixed: all scores strictly within `(0, 1)` — never exactly `0.0` or `1.0`
 - Triple-layer clamp: `environment.py`, `app.py`, and `inference.py` each independently enforce `max(0.001, min(reward, 0.999))`
 - Removed Pydantic `gt/lt` constraints from `StepResponse.reward` (was causing 422 errors on boundary values)
