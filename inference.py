@@ -44,7 +44,7 @@ class EsportsInferenceClient:
             "task_hard_dropout": (
                 "You are handling a team dropout. Read active_alerts carefully. "
                 "1. Use update_matches to record the forfeit win. "
-                "2. Use adjust_prize_pool: set the dropout team to 0.0, "
+                "2. Use adjust_prize_pool: set the dropout team to 0.02 (minimum allowed value), "
                 "then add (dropout_balance * 0.50 / num_active_teams) to each active team's CURRENT balance. "
                 "CRITICAL: Calculate all mathematical expressions and provide ONLY final numerical values. "
                 "Do NOT include mathematical expressions like '2700.0 + (900.0 / 3)' - compute to '3000.0'. "
@@ -133,7 +133,7 @@ For prize pool adjustments, calculate the math and use final numbers:
 {{
     "update_matches": {{"M4": "Team_Solid"}},
     "adjust_prize_pool": {{
-        "Team_Liquid": 0.0,
+        "Team_Liquid": 0.02,
         "Team_Solid": 2000.0,
         "Team_Spirit": 2000.0,
         "Team_Falcon": 2000.0

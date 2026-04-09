@@ -135,7 +135,7 @@ class TournamentEnvironment:
         active_share_each = round((dropout_balance * 0.50) / len(active_teams), 2)
 
         # Build expected solution
-        self.expected_solution = {self.dropout_team: 0.0}
+        self.expected_solution = {self.dropout_team: 0.02}  # Minimum score instead of 0.0
         for t in active_teams:
             self.expected_solution[t] = round(active_balances[t] + active_share_each, 2)
 
@@ -297,9 +297,9 @@ class TournamentEnvironment:
 
     def _grade_medium_dynamic(self, action: Action) -> float:
         """Grade medium task against randomized targets with nuanced scoring."""
-        score = 0.0
-        server_score = 0.0
-        message_score = 0.0
+        score = 0.02  # Start with minimum score instead of 0.0
+        server_score = 0.02  # Start with minimum score instead of 0.0
+        message_score = 0.02  # Start with minimum score instead of 0.0
         
         # Server reallocation scoring
         if action.reallocate_servers and self.target_match in action.reallocate_servers:
@@ -347,9 +347,9 @@ class TournamentEnvironment:
 
     def _grade_hard_dynamic(self, action: Action) -> float:
         """Grade hard task against dynamically computed expected solution with detailed scoring."""
-        score = 0.0
-        match_score = 0.0
-        prize_score = 0.0
+        score = 0.02  # Start with minimum score instead of 0.0
+        match_score = 0.02  # Start with minimum score instead of 0.0
+        prize_score = 0.02  # Start with minimum score instead of 0.0
 
         # Match update scoring
         if (action.update_matches and
