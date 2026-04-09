@@ -755,7 +755,7 @@ async def web_interface():
 </div>
 
 <script>
-    const API_BASE = "https://cosmoser-esports-env.hf.space";
+    const API_BASE = "https://debadrit-esports-env.hf.space";
     let activeTasks = new Set();
     const TASK_MAP = {
         'task_easy_bracket':    {sec:'task-easy-bracket',   btn:'easy-execute',   out:'easy-output'},

@@ -13,10 +13,10 @@ pinned: false
 
 | Link | URL |
 |------|-----|
-| HF Space | https://huggingface.co/spaces/COSMOSER/esports_env |
-| Web UI | https://huggingface.co/spaces/COSMOSER/esports_env/ui |
-| API Docs | https://huggingface.co/spaces/COSMOSER/esports_env/docs |
-| Health | https://huggingface.co/spaces/COSMOSER/esports_env/health |
+| HF Space | https://huggingface.co/spaces/Debadrit/esports_env |
+| Web UI | https://huggingface.co/spaces/Debadrit/esports_env/ui |
+| API Docs | https://huggingface.co/spaces/Debadrit/esports_env/docs |
+| Health | https://huggingface.co/spaces/Debadrit/esports_env/health |
 
 ---
 
@@ -303,12 +303,12 @@ docker run -p 7860:7860 \
 
 ```bash
 # Reset task
-curl -X POST "https://cosmoser-esports-env.hf.space/reset" \
+curl -X POST "https://debadrit-esports-env.hf.space/reset" \
   -H "Content-Type: application/json" \
   -d '{"task_id": "task_easy_bracket"}'
 
 # Execute action
-curl -X POST "https://cosmoser-esports-env.hf.space/step" \
+curl -X POST "https://debadrit-esports-env.hf.space/step" \
   -H "Content-Type: application/json" \
   -d '{"update_matches": {"M1": "Team_Alpha"}}'
 ```

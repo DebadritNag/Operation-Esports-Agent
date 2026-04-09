@@ -5,16 +5,20 @@ __pycache__/
 *.pyo
 .git/
 .gitignore
+
+# Exclude all markdown except README.md
+EVALUATION.md
+SCORING_SYSTEM.md
+DEPLOYMENT_SUMMARY.md
+*.md.bak
+
+# Exclude test files
 test_exploits.py
 test_evaluator.py
 validate_submission.py
+test_reward_scale.py
+debug_*.py
+
+# Exclude other non-essential files
 outputs/
 uv.lock
-EVALUATION.md
-DEPLOYMENT_SUMMARY.md
-SCORING_SYSTEM.md
-*.md.bak
-
-# Debug files
-debug_*.py
-test_reward_scale.py
