@@ -12,11 +12,18 @@ SCORING_SYSTEM.md
 DEPLOYMENT_SUMMARY.md
 *.md.bak
 
+# Exclude spec directory
+.kiro/
+
 # Exclude test files
 test_exploits.py
 test_evaluator.py
 validate_submission.py
 test_reward_scale.py
+test_boundary_exploration.py
+test_preservation.py
+test_comprehensive.py
+test_clamp.py
 debug_*.py
 
 # Exclude other non-essential files

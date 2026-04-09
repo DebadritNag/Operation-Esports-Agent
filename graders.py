@@ -6,6 +6,50 @@ from typing import Dict, Any
 from models import Action
 
 
+def clamp_score(score: float, min_val: float = 0.0, max_val: float = 1.0, epsilon: float = 0.001) -> float:
+    """
+    Clamp score to be strictly within the open interval (min_val, max_val).
+    
+    Ensures scores are never exactly at boundaries by applying epsilon offsets.
+    - If score <= min_val, returns min_val + epsilon
+    - If score >= max_val, returns max_val - epsilon
+    - If score is at a forbidden boundary value, adjusts by epsilon
+    - Otherwise returns score unchanged
+    
+    Args:
+        score: The score to clamp
+        min_val: Minimum boundary (exclusive)
+        max_val: Maximum boundary (exclusive)
+        epsilon: Small offset to ensure strict inequality (default 0.001)
+    
+    Returns:
+        Score guaranteed to satisfy: min_val < score < max_val
+    """
+    # Forbidden boundary values that should be adjusted
+    forbidden_boundaries = [0.01, 0.25, 0.30, 0.35, 0.45, 0.50, 0.52, 0.55, 0.58, 0.72, 0.75]
+    
+    safe_min = min_val + epsilon
+    safe_max = max_val - epsilon
+    
+    if score <= min_val:
+        return safe_min
+    elif score >= max_val:
+        return safe_max
+    elif abs(score - min_val) < epsilon / 2:
+        # Score is very close to min boundary
+        return safe_min
+    elif abs(score - max_val) < epsilon / 2:
+        # Score is very close to max boundary
+        return safe_max
+    else:
+        # Check if score is exactly at a forbidden boundary
+        for boundary in forbidden_boundaries:
+            if abs(score - boundary) < 1e-9:  # Floating point equality check
+                # Adjust boundary value by epsilon
+                return boundary + epsilon
+        return score
+
+
 def grade_easy_bracket(action: Action, current_state: Dict[str, Any]) -> float:
     """
     Grade Task 1: Match processing.
@@ -18,7 +62,7 @@ def grade_easy_bracket(action: Action, current_state: Dict[str, Any]) -> float:
     - 0.0: No valid attempt
     """
     if not action.update_matches:
-        return 0.01  # Minimum score instead of 0.0
+        return clamp_score(0.01, 0, 1)  # Minimum score instead of 0.0
     
     # Expected solution based on match results
     expected_updates = {
@@ -51,17 +95,17 @@ def grade_easy_bracket(action: Action, current_state: Dict[str, Any]) -> float:
         if action.adjust_prize_pool:
             base_score -= 0.05  # Unnecessary prize adjustment
             
-        return max(base_score, 0.75)  # Minimum 0.75 for correct answer
+        return clamp_score(max(base_score, 0.75), 0, 1)  # Minimum 0.75 for correct answer
     
     elif correct_matches > 0:
         # Some correct matches
-        return 0.55 + (correct_matches / total_expected) * 0.15
+        return clamp_score(0.55 + (correct_matches / total_expected) * 0.15, 0, 1)
     
     elif len(action.update_matches) > 0:
         # Attempted but all wrong
-        return 0.25
+        return clamp_score(0.25, 0, 1)
     
-    return 0.01  # Minimum score instead of 0.0
+    return clamp_score(0.01, 0, 1)  # Minimum score instead of 0.0
 
 
 def grade_medium_conflict(action: Action, current_state: Dict[str, Any]) -> float:
@@ -124,26 +168,26 @@ def grade_medium_conflict(action: Action, current_state: Dict[str, Any]) -> floa
         if action.reallocate_servers and action.broadcast_message:
             # Penalty for trying to do everything in one step
             base_score *= 0.6  # 40% penalty for not following proper workflow
-            return min(base_score, 0.35)  # Hard cap for single-step attempts
+            return clamp_score(min(base_score, 0.35), 0, 1)  # Hard cap for single-step attempts
         elif server_score > 0:
             # Good: Server reallocation only in first step
-            return min(base_score, 0.30)
+            return clamp_score(min(base_score, 0.30), 0, 1)
         elif message_score > 0:
             # Suboptimal: Message without server reallocation first
-            return min(base_score * 0.7, 0.25)
-        return max(base_score, 0.01)  # Minimum 0.01
+            return clamp_score(min(base_score * 0.7, 0.25), 0, 1)
+        return clamp_score(max(base_score, 0.01), 0, 1)  # Minimum 0.01
     
     elif step_count == 2:
         # Second step: Reward proper sequencing
         if server_score > 0 and message_score > 0:
             # Both components present - check if server was done in previous step
             base_score += 0.10  # Proper sequencing bonus
-            return min(base_score, 0.58)
+            return clamp_score(min(base_score, 0.58), 0, 1)
         elif message_score > 0:
             # Message only in second step (assuming server was done in step 1)
             base_score += 0.08  # Continuation bonus
-            return min(base_score, 0.55)
-        return max(min(base_score, 0.50), 0.01)  # Minimum 0.01
+            return clamp_score(min(base_score, 0.55), 0, 1)
+        return clamp_score(max(min(base_score, 0.50), 0.01), 0, 1)  # Minimum 0.01
     
     elif step_count >= 3:
         # Third+ step: Full scoring potential unlocked
@@ -159,9 +203,9 @@ def grade_medium_conflict(action: Action, current_state: Dict[str, Any]) -> floa
             # Follow-up message or verification
             base_score += 0.12  # Continuation bonus
             
-        return max(min(base_score, 0.72), 0.01)  # Medium task max score, minimum 0.01
+        return clamp_score(max(min(base_score, 0.72), 0.01), 0, 1)  # Medium task max score, minimum 0.01
     
-    return max(min(base_score, 0.72), 0.01)  # Minimum 0.01
+    return clamp_score(max(min(base_score, 0.72), 0.01), 0, 1)  # Minimum 0.01
 
 
 def grade_hard_dropout(action: Action, current_state: Dict[str, Any]) -> float:
@@ -249,14 +293,14 @@ def grade_hard_dropout(action: Action, current_state: Dict[str, Any]) -> float:
     if step_count == 1:
         # First step: Heavily capped to encourage continuation
         if base_score > 0:
-            return min(base_score, 0.25)
-        return max(base_score, 0.01)  # Minimum 0.01
+            return clamp_score(min(base_score, 0.25), 0, 1)
+        return clamp_score(max(base_score, 0.01), 0, 1)  # Minimum 0.01
     
     elif step_count == 2:
         # Second step: Allow moderate progress
         if match_score > 0 and prize_score > 0:
             base_score += 0.05  # Multi-component bonus
-        return max(min(base_score, 0.35), 0.01)  # Minimum 0.01
+        return clamp_score(max(min(base_score, 0.35), 0.01), 0, 1)  # Minimum 0.01
     
     elif step_count == 3:
         # Third step: Higher scoring potential
@@ -269,7 +313,7 @@ def grade_hard_dropout(action: Action, current_state: Dict[str, Any]) -> float:
                 "Team_Liquid" in action.adjust_prize_pool):
                 base_score += 0.04  # Thoroughness bonus
                 
-        return max(min(base_score, 0.45), 0.01)  # Minimum 0.01
+        return clamp_score(max(min(base_score, 0.45), 0.01), 0, 1)  # Minimum 0.01
     
     elif step_count >= 4:
         # Fourth+ step: Full scoring potential unlocked
@@ -288,6 +332,6 @@ def grade_hard_dropout(action: Action, current_state: Dict[str, Any]) -> float:
         if action.reallocate_servers:
             base_score -= 0.01  # Small penalty for unnecessary reallocation
             
-        return max(min(base_score, 0.52), 0.01)  # Hard task max score, minimum 0.01
+        return clamp_score(max(min(base_score, 0.52), 0.01), 0, 1)  # Hard task max score, minimum 0.01
     
-    return max(min(base_score, 0.52), 0.01)  # No negative scores, minimum 0.01
+    return clamp_score(max(min(base_score, 0.52), 0.01), 0, 1)  # No negative scores, minimum 0.01

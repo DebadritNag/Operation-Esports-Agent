@@ -56,7 +56,14 @@ htmlcov/
 test_evaluator.py
 test_exploits.py
 validate_submission.py
+test_boundary_exploration.py
+test_preservation.py
+test_comprehensive.py
+test_clamp.py
 
 # Debug files
 debug_*.py
 test_reward_scale.py
+
+# Spec files (keep only README.md)
+.kiro/
