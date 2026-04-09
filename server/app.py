@@ -253,7 +253,7 @@ async def metadata():
                 "difficulty": "hard"
             }
         ],
-        "reward_range": [0.001, 0.999]
+        "reward_range": [0.01, 0.99]
     }
 
 
@@ -621,9 +621,9 @@ Based on the active_alerts and current state, respond with the correct action JS
         for s in steps:
             done_str = "true" if s["done"] else "false"
             err_str  = s["error"] if s["error"] else "null"
-            raw_lines.append(f"[STEP] step={s['step']} action={s['action']} reward={s['reward']:.4f} done={done_str} error={err_str}")
+            raw_lines.append(f"[STEP] step={s['step']} action={s['action']} reward={s['reward']:.2f} done={done_str} error={err_str}")
         success_str  = "true" if success else "false"
-        rewards_str  = ",".join(f"{r:.4f}" for r in rewards)
+        rewards_str  = ",".join(f"{r:.2f}" for r in rewards)
         raw_lines.append(f"[END] success={success_str} steps={len(rewards)} rewards={rewards_str}")
 
         return {

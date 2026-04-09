@@ -133,7 +133,7 @@ Example action (Task 3):
 
 ## Tasks and Scoring
 
-All rewards are strictly within `(0, 1)` — never exactly `0.0` or `1.0`. The minimum possible reward is `0.001` (clamped at every layer). Rewards are formatted to 4 decimal places in STDOUT output.
+All rewards are strictly within `(0, 1)` — never exactly `0.0` or `1.0`. The minimum possible reward is `0.01` and maximum is `0.99`. Rewards are formatted to exactly 2 decimal places in STDOUT output.
 
 ### Task 1: Match Processing (Easy)
 
@@ -224,16 +224,16 @@ Evaluated using `meta-llama/Meta-Llama-3-8B-Instruct` via `https://router.huggin
 **STDOUT output (baseline run):**
 ```
 [START] task=task_easy_bracket env=esports_env model=meta-llama/Meta-Llama-3-8B-Instruct
-[STEP] step=1 action={"update_matches":{"M1":"Team_Alpha"}} reward=0.8700 done=true error=null
-[END] success=true steps=1 rewards=0.8700
+[STEP] step=1 action={"update_matches":{"M1":"Team_Alpha"}} reward=0.87 done=true error=null
+[END] success=true steps=1 rewards=0.87
 
 [START] task=task_medium_conflict env=esports_env model=meta-llama/Meta-Llama-3-8B-Instruct
-[STEP] step=1 action={"reallocate_servers":{"M3":"eu-west-2"},"broadcast_message":"Match M3 moved to eu-west-2 due to server conflict"} reward=0.7200 done=true error=null
-[END] success=true steps=1 rewards=0.7200
+[STEP] step=1 action={"reallocate_servers":{"M3":"eu-west-2"},"broadcast_message":"Match M3 moved to eu-west-2 due to server conflict"} reward=0.72 done=true error=null
+[END] success=true steps=1 rewards=0.72
 
 [START] task=task_hard_dropout env=esports_env model=meta-llama/Meta-Llama-3-8B-Instruct
-[STEP] step=1 action={"update_matches":{"M4":"Team_Solid"},"adjust_prize_pool":{"Team_Liquid":0.0,"Team_Solid":2000.0,"Team_Spirit":2000.0,"Team_Falcon":2000.0}} reward=0.4800 done=true error=null
-[END] success=true steps=1 rewards=0.4800
+[STEP] step=1 action={"update_matches":{"M4":"Team_Solid"},"adjust_prize_pool":{"Team_Liquid":0.0,"Team_Solid":2000.0,"Team_Spirit":2000.0,"Team_Falcon":2000.0}} reward=0.48 done=true error=null
+[END] success=true steps=1 rewards=0.48
 ```
 
 ---
@@ -344,20 +344,16 @@ Rules:
 - One `[STEP]` per step taken (up to `max_steps=5`)
 - One `[END]` per task run
 - Booleans lowercase (`true`/`false`)
-- Rewards formatted to **4 decimal places** — always strictly within `(0, 1)`
+- Rewards formatted to **2 decimal places** — always strictly within `(0, 1)` between `0.01` and `0.99`
 - Action JSON has no newlines or extra whitespace
 
 ---
 
 ## Reward Guarantee
 
-All rewards are strictly within the open interval `(0, 1)` — never exactly `0.0` or `1.0`. This is enforced at three independent layers:
+All rewards are strictly within the open interval `(0, 1)` — never exactly `0.0` or `1.0`. All scores are clamped to exactly 2 decimal places between `0.01` and `0.99`. This is enforced by the `clamp_score()` function in `graders.py` which is called by all grading functions.
 
-1. `environment.py` `_grade_action`: `max(0.001, min(raw, 0.999))`
-2. `app.py` `/step` endpoint: `max(0.001, min(float(reward), 0.999))`
-3. `inference.py` client: `max(0.001, min(float(reward), 0.999))`
-
-The `openenv.yaml` declares `reward_range: [0.001, 0.999]` to match.
+The `openenv.yaml` declares `reward_range: [0.01, 0.99]` to match.
 
 ---
 
@@ -388,7 +384,16 @@ esports-env/
 
 ## Changelog
 
-### v3.1 (Current)
+### v3.2 (Current)
+- **CRITICAL FIX**: Changed reward format from 4 decimal places to exactly 2 decimal places (0.01 to 0.99)
+- Updated `clamp_score()` function to enforce 2-decimal precision with epsilon=0.01
+- Removed deterministic +0.001 offset that was producing 3-decimal values
+- Updated all STDOUT formatting to use `.2f` instead of `.4f` for rewards
+- Updated `openenv.yaml` reward_range to `[0.01, 0.99]`
+- Updated `/metadata` endpoint to reflect new reward range
+- All scores now guaranteed to be exactly 2 decimal places between 0.01 and 0.99
+
+### v3.1
 - Added `/metadata`, `/schema`, and `/mcp` endpoints required by OpenEnv HTTP/1.x standard
 - Reward range fixed: all scores strictly within `(0, 1)` — never exactly `0.0` or `1.0`
 - Triple-layer clamp: `environment.py`, `app.py`, and `inference.py` each independently enforce `max(0.001, min(reward, 0.999))`

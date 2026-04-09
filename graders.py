@@ -7,44 +7,34 @@ from typing import Dict, Any
 from models import Action
 
 
-def clamp_score(score: float, min_val: float = 0.0, max_val: float = 1.0, epsilon: float = 0.05) -> float:
+def clamp_score(score: float, min_val: float = 0.0, max_val: float = 1.0, epsilon: float = 0.01) -> float:
     """
     Clamp score to be strictly within the open interval (min_val, max_val).
     
-    Adds deterministic offset to ensure scores are never exactly at 2-decimal precision values.
+    Forces all scores to exactly 2 decimal places between 0.01 and 0.99.
     
     Args:
         score: The score to clamp
-        min_val: Minimum boundary (exclusive)
-        max_val: Maximum boundary (exclusive)
-        epsilon: Small offset to ensure strict inequality (default 0.05 for maximum safety)
+        min_val: Minimum boundary (exclusive, default 0.0)
+        max_val: Maximum boundary (exclusive, default 1.0)
+        epsilon: Minimum distance from boundaries (default 0.01)
     
     Returns:
-        Score guaranteed to satisfy: min_val < score < max_val
-        with deterministic offset to avoid exact 2-decimal values
+        Score guaranteed to satisfy: 0.01 <= score <= 0.99
+        Always rounded to exactly 2 decimal places
     """
-    safe_min = min_val + epsilon
-    safe_max = max_val - epsilon
+    # Round to exactly 2 decimal places first
+    score = round(score, 2)
     
-    # First, handle absolute boundaries
-    if score <= min_val:
-        # Use deterministic offset based on epsilon
-        return safe_min + 0.001
-    elif score >= max_val:
-        return safe_max - 0.001
-    elif abs(score - min_val) < epsilon / 2:
-        return safe_min + 0.001
-    elif abs(score - max_val) < epsilon / 2:
-        return safe_max - 0.001
+    # Enforce strict boundaries: must be between 0.01 and 0.99
+    safe_min = min_val + epsilon  # 0.01
+    safe_max = max_val - epsilon  # 0.99
     
-    # For all other scores, check if they're at exact 2-decimal precision
-    # Round to 2 decimals and see if it matches the original
-    rounded_2 = round(score, 2)
-    
-    if abs(score - rounded_2) < 1e-9:
-        # Score is exactly at 2-decimal precision (like 0.52, 0.72, 0.87)
-        # Add small deterministic offset to make it 3+ decimal precision
-        return score + 0.001
+    # Clamp to safe range
+    if score <= safe_min:
+        return safe_min
+    elif score >= safe_max:
+        return safe_max
     
     return score
 
