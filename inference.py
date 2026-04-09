@@ -347,19 +347,21 @@ Respond with ONLY a valid JSON object containing the action. No explanations or 
                     success = False
                     break
             
-            # Line 3: [END] success=<true|false> steps=<n> rewards=<r1,r2,...,rn>
+            # Line 3: [END] success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...,rn>
             success_str = "true" if success else "false"
             # Apply strict clamping to all rewards in the final output
             clamped_rewards = [self._clamp_reward_strict(r) for r in rewards]
             rewards_str = ",".join([f"{r:.2f}" for r in clamped_rewards])
-            print(f"[END] success={success_str} steps={len(rewards)} rewards={rewards_str}")
+            # score = final reward for this task (strictly within open interval (0,1))
+            final_score = self._clamp_reward_strict(clamped_rewards[-1] if clamped_rewards else 0.02)
+            print(f"[END] success={success_str} steps={len(rewards)} score={final_score:.2f} rewards={rewards_str}")
             
         except Exception as e:
             # Handle reset or other initialization errors
             error_msg = str(e).replace('\n', ' ').replace('\r', ' ')
             error_reward = self._clamp_reward_strict(0.01)
             print(f"[STEP] step=1 action={{}} reward={error_reward:.2f} done=true error={error_msg}")
-            print(f"[END] success=false steps=1 rewards={error_reward:.2f}")
+            print(f"[END] success=false steps=1 score={error_reward:.2f} rewards={error_reward:.2f}")
     
     def run_all_tasks(self):
         """Run all three tasks with strict STDOUT formatting."""
@@ -370,7 +372,7 @@ Respond with ONLY a valid JSON object containing the action. No explanations or 
                 error_reward = self._clamp_reward_strict(0.01)
                 print(f"[START] task={task_id} env=esports_env model={self.model_name}")
                 print(f"[STEP] step=1 action={{}} reward={error_reward:.2f} done=true error=environment_not_ready")
-                print(f"[END] success=false steps=1 rewards={error_reward:.2f}")
+                print(f"[END] success=false steps=1 score={error_reward:.2f} rewards={error_reward:.2f}")
             return
 
         tasks = ["task_easy_bracket", "task_medium_conflict", "task_hard_dropout"]
