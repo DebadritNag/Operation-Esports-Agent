@@ -310,8 +310,8 @@ Respond with ONLY a valid JSON object containing the action. No explanations or 
                     # LLM or environment error - log error and exit episode
                     action_json_str = json.dumps({}, separators=(',', ':'))
                     error_msg = str(e).replace('\n', ' ').replace('\r', ' ')
-                    print(f"[STEP] step={step} action={action_json_str} reward=0.02 done=true error={error_msg}")
-                    rewards.append(0.02)
+                    print(f"[STEP] step={step} action={action_json_str} reward=0.06 done=true error={error_msg}")
+                    rewards.append(0.06)
                     success = False
                     break
             
@@ -323,8 +323,8 @@ Respond with ONLY a valid JSON object containing the action. No explanations or 
         except Exception as e:
             # Handle reset or other initialization errors
             error_msg = str(e).replace('\n', ' ').replace('\r', ' ')
-            print(f"[STEP] step=1 action={{}} reward=0.02 done=true error={error_msg}")
-            print(f"[END] success=false steps=1 rewards=0.02")
+            print(f"[STEP] step=1 action={{}} reward=0.06 done=true error={error_msg}")
+            print(f"[END] success=false steps=1 rewards=0.06")
     
     def run_all_tasks(self):
         """Run all three tasks with strict STDOUT formatting."""
