@@ -191,8 +191,8 @@ async def step_environment(action: Action):
         
         observation, reward, done, info = env.step(action)
         
-        # Guarantee reward is strictly within (0, 1) — validator requirement
-        reward = max(0.001, min(float(reward), 0.999))
+        # Server-side grading already ensures reward is strictly within (0, 1) via clamp_score()
+        # No additional clamping needed here to avoid producing exact boundary values
         
         return StepResponse(
             observation=observation,
@@ -385,7 +385,7 @@ async def mcp_endpoint(request: Dict[str, Any]):
             try:
                 action = Action(**tool_args)
                 observation, reward, done, info = env.step(action)
-                reward = max(0.001, min(float(reward), 0.999))
+                # Server-side grading already ensures reward is strictly within (0, 1) via clamp_score()
                 result = {"observation": observation.model_dump(), "reward": reward, "done": done, "info": info}
                 return {
                     "jsonrpc": "2.0",
@@ -588,8 +588,7 @@ Based on the active_alerts and current state, respond with the correct action JS
             from models import Action
             action_obj = Action(**action_dict)
             observation, reward, done, info = env.step(action_obj)
-            # Clamp reward strictly within (0, 1)
-            reward = max(0.001, min(float(reward), 0.999))
+            # Server-side grading already ensures reward is strictly within (0, 1) via clamp_score()
             # Always use the latest observation so LLM sees strike hints
             obs_dict = observation.model_dump()
             rewards.append(reward)
