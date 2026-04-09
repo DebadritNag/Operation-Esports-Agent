@@ -382,47 +382,64 @@ esports-env/
 
 ---
 
-## Changelog
+## Scoring Deep Dive
 
-### v3.2 (Current)
-- **CRITICAL FIX**: Changed reward format from 4 decimal places to exactly 2 decimal places (0.02 to 0.98)
-- Updated `clamp_score()` function to enforce 2-decimal precision with tighter boundaries (0.02-0.98)
-- Removed deterministic +0.001 offset that was producing 3-decimal values
-- Updated all STDOUT formatting to use `.2f` instead of `.4f` for rewards
-- Updated `openenv.yaml` reward_range to `[0.02, 0.98]`
-- Updated `_clamp_reward_strict()` in `inference.py` to use 0.02/0.98 boundaries
-- Updated `/metadata` endpoint to reflect new reward range
-- All scores now guaranteed to be exactly 2 decimal places between 0.02 and 0.98
-- Tighter boundaries provide clearer separation from 0.0 and 1.0
+Each task uses a dedicated grading function in `graders.py`. All scores are guaranteed to be strictly within `(0, 1)` via `clamp_score()`.
 
-### v3.1
-- Added `/metadata`, `/schema`, and `/mcp` endpoints required by OpenEnv HTTP/1.x standard
-- Reward range fixed: all scores strictly within `(0, 1)` — never exactly `0.0` or `1.0`
-- Triple-layer clamp: `environment.py`, `app.py`, and `inference.py` each independently enforce `max(0.001, min(reward, 0.999))`
-- Removed Pydantic `gt/lt` constraints from `StepResponse.reward` (was causing 422 errors on boundary values)
-- STDOUT reward format changed from `:.2f` to `:.4f` to prevent rounding to `0.00` or `1.00`
-- `openenv.yaml` `reward_range` updated to `[0.001, 0.999]`
-- `reset()` now correctly calls `_build_hard_task()` and `_build_medium_task()` for dynamic tasks (previously always loaded from JSON, breaking dynamic grading)
-- Fixed `run_task` in `app.py`: `action_dict` was used before assignment (filter block ran before `_json.loads`)
+### Task 1 — Match Processing (Easy)
 
-### v3.0
-- Dynamic task generation: hard task randomizes teams, balances, dropout team, and forfeit match on each reset
-- Medium task randomizes overloaded server and target match on each reset
-- Progressive feedback loop: incorrect prize math injects plain-text hints into `active_alerts`
-- Hard 5-step episode limit enforced in environment
-- Robust JSON parser: strips comments, evaluates math expressions, retries on parse failure
-- UI redesigned with dark theme, step-by-step results, and OpenEnv STDOUT log display
+| Outcome | Score range |
+|---|---|
+| Correct winner, no extra fields | ~0.87 |
+| Correct winner + unnecessary fields | 0.75 – 0.82 |
+| Some correct matches (partial) | 0.55 – 0.70 |
+| Wrong winner attempted | ~0.25 |
+| No `update_matches` provided | 0.02 (minimum) |
 
-### v2.1
-- Fixed iframe embedding: added `/web` route and absolute API URLs in JS
-- Fixed in-process task execution: `/run_task` calls env directly, no HTTP self-loop
-- Added `IframeCompatMiddleware` for `X-Frame-Options` and CSP headers
+Deductions: `-0.05` for unnecessary `reallocate_servers` or `adjust_prize_pool`, `-0.03` for unnecessary `broadcast_message`.
 
-### v2.0
-- Unified grading: single source of truth in `graders.py`
-- Fixed multi-worker state loss: forced single uvicorn worker
-- Added interactive web UI with step-by-step LLM execution display
+---
 
-### v1.0
-- Initial OpenEnv deployment with three tasks
-- FastAPI server on port 7860 for HF Spaces
+### Task 2 — Server Conflict Resolution (Medium)
+
+Designed for **2–3 step** completion. Single-step attempts are penalized.
+
+| Phase | Condition | Score cap |
+|---|---|---|
+| Step 1 | Server reallocation only (correct) | 0.30 |
+| Step 1 | Both server + message at once | 0.35 (penalized) |
+| Step 2 | Message after prior reallocation | 0.55 – 0.58 |
+| Step 3+ | Both components + thoroughness bonus | up to 0.72 |
+
+Message scoring adds up to `+0.12` for relevant keywords (`delay`, `conflict`, `server`, `reallocate`, `reschedule`, `technical`) and `+0.04` for appropriate length (15–120 chars).
+
+---
+
+### Task 3 — Team Dropout Handling (Hard)
+
+Designed for **3–4 step** completion. Requires correct match forfeit **and** prize redistribution.
+
+| Phase | Condition | Score cap |
+|---|---|---|
+| Step 1 | Any action | 0.25 |
+| Step 2 | Match + prize attempt | 0.35 |
+| Step 3 | Match + prize + thoroughness | 0.45 |
+| Step 4+ | Perfect execution | 0.52 |
+
+Prize pool formula: `dropout_team → 0.02`, each active team → `current_balance + (dropout_balance × 0.50 / num_active_teams)`.
+
+If the prize math is wrong, the environment injects progressive hints into `active_alerts` (up to 3 strikes). On strike 2, the exact expected values are revealed.
+
+---
+
+### Feedback Loop
+
+```
+wrong prize → FEEDBACK hint injected into active_alerts → LLM retries
+```
+
+Strike 1 — formula reminder  
+Strike 2 — exact expected values revealed  
+Strike 3 — "submit your best answer"
+
+The episode hard-caps at **5 steps** regardless of score.
