@@ -11,11 +11,7 @@ def clamp_score(score: float, min_val: float = 0.0, max_val: float = 1.0, epsilo
     """
     Clamp score to be strictly within the open interval (min_val, max_val).
     
-    Ensures scores are never exactly at boundaries by applying epsilon offsets.
-    - If score <= min_val, returns min_val + epsilon
-    - If score >= max_val, returns max_val - epsilon
-    - If score is at a forbidden boundary value, adjusts by epsilon
-    - Otherwise returns score unchanged
+    Adds deterministic offset to ensure scores are never exactly at 2-decimal precision values.
     
     Args:
         score: The score to clamp
@@ -25,33 +21,32 @@ def clamp_score(score: float, min_val: float = 0.0, max_val: float = 1.0, epsilo
     
     Returns:
         Score guaranteed to satisfy: min_val < score < max_val
+        with deterministic offset to avoid exact 2-decimal values
     """
-    # Forbidden boundary values that should be adjusted (all problematic values from graders)
-    forbidden_boundaries = [
-        0.01, 0.05, 0.10, 0.12, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 
-        0.52, 0.55, 0.58, 0.60, 0.65, 0.70, 0.72, 0.75, 0.80, 0.85, 0.87, 0.90, 0.95
-    ]
-    
     safe_min = min_val + epsilon
     safe_max = max_val - epsilon
     
+    # First, handle absolute boundaries
     if score <= min_val:
-        return safe_min
+        # Use deterministic offset based on epsilon
+        return safe_min + 0.001
     elif score >= max_val:
-        return safe_max
+        return safe_max - 0.001
     elif abs(score - min_val) < epsilon / 2:
-        # Score is very close to min boundary
-        return safe_min
+        return safe_min + 0.001
     elif abs(score - max_val) < epsilon / 2:
-        # Score is very close to max boundary
-        return safe_max
-    else:
-        # Check if score is exactly at a forbidden boundary
-        for boundary in forbidden_boundaries:
-            if abs(score - boundary) < 1e-9:  # Floating point equality check
-                # Adjust boundary value by epsilon
-                return boundary + epsilon
-        return score
+        return safe_max - 0.001
+    
+    # For all other scores, check if they're at exact 2-decimal precision
+    # Round to 2 decimals and see if it matches the original
+    rounded_2 = round(score, 2)
+    
+    if abs(score - rounded_2) < 1e-9:
+        # Score is exactly at 2-decimal precision (like 0.52, 0.72, 0.87)
+        # Add small deterministic offset to make it 3+ decimal precision
+        return score + 0.001
+    
+    return score
 
 
 def grade_easy_bracket(action: Action, current_state: Dict[str, Any]) -> float:
