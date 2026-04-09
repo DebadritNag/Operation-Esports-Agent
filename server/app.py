@@ -451,7 +451,7 @@ async def run_complete_task(task_id: str):
         "task_hard_dropout": (
             "You are handling a team dropout. Read active_alerts carefully. "
             "1. Use update_matches to record the forfeit win. "
-            "2. Use adjust_prize_pool: set the dropout team to 0.0, "
+            "2. Use adjust_prize_pool: set the dropout team to 0.02 (minimum allowed value), "
             "then add (dropout_balance * 0.50 / num_active_teams) to each active team's CURRENT balance. "
             "Use EXACT decimal values. Do not include broadcast_message or reallocate_servers."
         ),

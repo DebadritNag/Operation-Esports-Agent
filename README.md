@@ -121,7 +121,7 @@ Example action (Task 3):
 {
   "update_matches": { "M4": "Team_Solid" },
   "adjust_prize_pool": {
-    "Team_Liquid": 0.0,
+    "Team_Liquid": 0.02,
     "Team_Solid": 2000.0,
     "Team_Spirit": 2000.0,
     "Team_Falcon": 2000.0
@@ -232,7 +232,7 @@ Evaluated using `meta-llama/Meta-Llama-3-8B-Instruct` via `https://router.huggin
 [END] success=true steps=1 rewards=0.72
 
 [START] task=task_hard_dropout env=esports_env model=meta-llama/Meta-Llama-3-8B-Instruct
-[STEP] step=1 action={"update_matches":{"M4":"Team_Solid"},"adjust_prize_pool":{"Team_Liquid":0.0,"Team_Solid":2000.0,"Team_Spirit":2000.0,"Team_Falcon":2000.0}} reward=0.48 done=true error=null
+[STEP] step=1 action={"update_matches":{"M4":"Team_Solid"},"adjust_prize_pool":{"Team_Liquid":0.02,"Team_Solid":2000.0,"Team_Spirit":2000.0,"Team_Falcon":2000.0}} reward=0.48 done=true error=null
 [END] success=true steps=1 rewards=0.48
 ```
 
