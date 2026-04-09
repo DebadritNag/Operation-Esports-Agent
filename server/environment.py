@@ -284,9 +284,15 @@ class TournamentEnvironment:
             else:
                 raw = grade_hard_dropout(action, state_with_step)
         else:
-            raw = 0.01
+            raw = 0.02
 
         # Guarantee score is strictly within (0, 1) — validator requirement
+        # Apply strict boundary enforcement
+        if raw >= 1.0:
+            raw = 0.98
+        if raw <= 0.0:
+            raw = 0.02
+        
         return clamp_score(raw, 0, 1)
 
     def _grade_medium_dynamic(self, action: Action) -> float:
@@ -337,7 +343,7 @@ class TournamentEnvironment:
         if server_score > 0.15 and message_score > 0.15:
             total_score += 0.06
         
-        return clamp_score(max(min(total_score, 0.72), 0.01), 0, 1)  # Medium task max score, minimum 0.01
+        return clamp_score(max(min(total_score, 0.72), 0.02), 0, 1)  # Medium task max score, minimum 0.02
 
     def _grade_hard_dynamic(self, action: Action) -> float:
         """Grade hard task against dynamically computed expected solution with detailed scoring."""
@@ -392,9 +398,9 @@ class TournamentEnvironment:
 
         # Strike 3 forces done regardless of score
         if self.math_strikes >= 3:
-            return clamp_score(max(total_score, 0.01), 0, 1)  # Minimum score instead of 0.0
+            return clamp_score(max(total_score, 0.02), 0, 1)  # Minimum score instead of 0.0
 
-        return clamp_score(min(max(total_score, 0.01), 0.52), 0, 1)  # Hard task max score, minimum 0.01
+        return clamp_score(min(max(total_score, 0.02), 0.52), 0, 1)  # Hard task max score, minimum 0.02
 
     # ------------------------------------------------------------------
     # Helpers

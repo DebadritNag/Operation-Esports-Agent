@@ -253,7 +253,7 @@ async def metadata():
                 "difficulty": "hard"
             }
         ],
-        "reward_range": [0.01, 0.99]
+        "reward_range": [0.02, 0.98]
     }
 
 
