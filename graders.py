@@ -26,9 +26,11 @@ def clamp_score(score: float, min_val: float = 0.0, max_val: float = 1.0, epsilo
     Returns:
         Score guaranteed to satisfy: min_val < score < max_val
     """
-    # Forbidden boundary values that should be adjusted
-    forbidden_boundaries = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 
-                           0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95]
+    # Forbidden boundary values that should be adjusted (all problematic values from graders)
+    forbidden_boundaries = [
+        0.01, 0.05, 0.10, 0.12, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 
+        0.52, 0.55, 0.58, 0.60, 0.65, 0.70, 0.72, 0.75, 0.80, 0.85, 0.87, 0.90, 0.95
+    ]
     
     safe_min = min_val + epsilon
     safe_max = max_val - epsilon

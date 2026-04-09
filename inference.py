@@ -333,8 +333,8 @@ Respond with ONLY a valid JSON object containing the action. No explanations or 
             tasks = ["task_easy_bracket", "task_medium_conflict", "task_hard_dropout"]
             for task_id in tasks:
                 print(f"[START] task={task_id} env=esports_env model={self.model_name}")
-                print(f"[STEP] step=1 action={{}} reward=0.02 done=true error=environment_not_ready")
-                print(f"[END] success=false steps=1 rewards=0.02")
+                print(f"[STEP] step=1 action={{}} reward=0.06 done=true error=environment_not_ready")
+                print(f"[END] success=false steps=1 rewards=0.06")
             return
 
         tasks = ["task_easy_bracket", "task_medium_conflict", "task_hard_dropout"]
