@@ -45,24 +45,24 @@ flowchart TD
     A([Agent / LLM]) -->|POST /reset with task_id| B[TournamentEnvironment.reset]
     B --> C{Task Type}
 
-    C -->|task_easy_bracket| D[Load static JSON\nMatch result alert]
-    C -->|task_medium_conflict| E[Generate dynamic scenario\nRandom server + match]
-    C -->|task_hard_dropout| F[Generate dynamic scenario\nRandom teams + balances]
+    C -->|task_easy_bracket| D[Load static JSON - Match result alert]
+    C -->|task_medium_conflict| E[Generate dynamic scenario - Random server and match]
+    C -->|task_hard_dropout| F[Generate dynamic scenario - Random teams and balances]
 
-    D & E & F --> G[Return Observation\nactive_alerts · bracket_state\nserver_availability · prize_pool_status]
+    D & E & F --> G[Return Observation: active_alerts, bracket_state, server_availability, prize_pool_status]
 
     G -->|Agent reads observation| A
     A -->|POST /step with Action JSON| H[TournamentEnvironment.step]
 
-    H --> I[Apply Action\nupdate_matches\nreallocate_servers\nadjust_prize_pool\nbroadcast_message]
-    I --> J[Grade Action\ngraders.py]
+    H --> I[Apply Action: update_matches, reallocate_servers, adjust_prize_pool, broadcast_message]
+    I --> J[Grade Action via graders.py]
 
-    J --> K{Reward strictly in (0, 1)}
-    K -->|≥ success threshold\ndone = true| L([SUCCESS])
-    K -->|partial credit\nprize wrong| M[Inject FEEDBACK hint\ninto active_alerts]
+    J --> K{Reward in open interval 0 to 1}
+    K -->|above success threshold, done=true| L([SUCCESS])
+    K -->|partial credit or prize wrong| M[Inject FEEDBACK hint into active_alerts]
     K -->|low score| M
-    M -->|step_count < 5| A
-    M -->|step_count >= 5| N([FAILED — max steps reached])
+    M -->|step_count less than 5| A
+    M -->|step_count 5 or more| N([FAILED - max steps reached])
 
     style L fill:#1a3a1a,color:#4caf50
     style N fill:#3a1a1a,color:#f44336
