@@ -7,7 +7,7 @@ from typing import Dict, Any
 from models import Action
 
 
-def clamp_score(score: float, min_val: float = 0.0, max_val: float = 1.0, epsilon: float = 0.001) -> float:
+def clamp_score(score: float, min_val: float = 0.0, max_val: float = 1.0, epsilon: float = 0.01) -> float:
     """
     Clamp score to be strictly within the open interval (min_val, max_val).
     
@@ -21,13 +21,13 @@ def clamp_score(score: float, min_val: float = 0.0, max_val: float = 1.0, epsilo
         score: The score to clamp
         min_val: Minimum boundary (exclusive)
         max_val: Maximum boundary (exclusive)
-        epsilon: Small offset to ensure strict inequality (default 0.001)
+        epsilon: Small offset to ensure strict inequality (default 0.01 for safety)
     
     Returns:
         Score guaranteed to satisfy: min_val < score < max_val
     """
     # Forbidden boundary values that should be adjusted
-    forbidden_boundaries = [0.01, 0.25, 0.30, 0.35, 0.45, 0.50, 0.52, 0.55, 0.58, 0.72, 0.75]
+    forbidden_boundaries = [0.01, 0.02, 0.25, 0.30, 0.35, 0.45, 0.50, 0.52, 0.55, 0.58, 0.72, 0.75, 0.98, 0.99]
     
     safe_min = min_val + epsilon
     safe_max = max_val - epsilon
