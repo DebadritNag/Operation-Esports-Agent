@@ -8,7 +8,7 @@ import os
 import random
 from typing import Dict, Any, Tuple, List
 from models import Observation, Action
-from graders import grade_easy_bracket, grade_medium_conflict, grade_hard_dropout
+from graders import grade_easy_bracket, grade_medium_conflict, grade_hard_dropout, clamp_score
 
 # Team pool for hard task randomization
 TEAM_POOL = ["Team_Alpha", "Team_Blaze", "Team_Cipher", "Team_Dusk", "Team_Echo", "Team_Falcon"]
@@ -337,7 +337,7 @@ class TournamentEnvironment:
         if server_score > 0.15 and message_score > 0.15:
             total_score += 0.06
         
-        return max(min(total_score, 0.72), 0.01)  # Medium task max score, minimum 0.01
+        return clamp_score(max(min(total_score, 0.72), 0.01), 0, 1)  # Medium task max score, minimum 0.01
 
     def _grade_hard_dynamic(self, action: Action) -> float:
         """Grade hard task against dynamically computed expected solution with detailed scoring."""
@@ -392,9 +392,9 @@ class TournamentEnvironment:
 
         # Strike 3 forces done regardless of score
         if self.math_strikes >= 3:
-            return max(total_score, 0.01)  # Minimum score instead of 0.0
+            return clamp_score(max(total_score, 0.01), 0, 1)  # Minimum score instead of 0.0
 
-        return min(max(total_score, 0.01), 0.52)  # Hard task max score, minimum 0.01
+        return clamp_score(min(max(total_score, 0.01), 0.52), 0, 1)  # Hard task max score, minimum 0.01
 
     # ------------------------------------------------------------------
     # Helpers
