@@ -1,6 +1,7 @@
 """
 Grading functions for the Esports Tournament Operations Manager environment.
 This file contains the core grading logic used by the environment.
+All scores are guaranteed to be strictly within (0, 1) via clamp_score function.
 """
 from typing import Dict, Any
 from models import Action
