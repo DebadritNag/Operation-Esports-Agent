@@ -274,13 +274,10 @@ Respond with ONLY a valid JSON object containing the action. No explanations or 
         min_val = 0.02  # Minimum allowed value (strictly > 0.0)
         max_val = 0.98  # Maximum allowed value (strictly < 1.0)
         
-        if reward <= 0.0:
+        # Clamp to safe range
+        if reward <= min_val:
             return min_val
-        elif reward >= 1.0:
-            return max_val
-        elif reward == 0.0:  # Exact 0.0
-            return min_val
-        elif reward == 1.0:  # Exact 1.0
+        elif reward >= max_val:
             return max_val
         else:
             return reward
