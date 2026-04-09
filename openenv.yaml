@@ -22,7 +22,7 @@ environment:
   type: "tournament_management"
   observation_space: "structured"
   action_space: "structured"
-  reward_range: [0.01, 0.99]
+  reward_range: [0.02, 0.98]
 
 server:
   port: 7860

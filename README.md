@@ -133,7 +133,7 @@ Example action (Task 3):
 
 ## Tasks and Scoring
 
-All rewards are strictly within `(0, 1)` — never exactly `0.0` or `1.0`. The minimum possible reward is `0.01` and maximum is `0.99`. Rewards are formatted to exactly 2 decimal places in STDOUT output.
+All rewards are strictly within `(0, 1)` — never exactly `0.0` or `1.0`. The minimum possible reward is `0.02` and maximum is `0.98`. Rewards are formatted to exactly 2 decimal places in STDOUT output.
 
 ### Task 1: Match Processing (Easy)
 
@@ -351,9 +351,9 @@ Rules:
 
 ## Reward Guarantee
 
-All rewards are strictly within the open interval `(0, 1)` — never exactly `0.0` or `1.0`. All scores are clamped to exactly 2 decimal places between `0.01` and `0.99`. This is enforced by the `clamp_score()` function in `graders.py` which is called by all grading functions.
+All rewards are strictly within the open interval `(0, 1)` — never exactly `0.0` or `1.0`. All scores are clamped to exactly 2 decimal places between `0.02` and `0.98`. This is enforced by the `clamp_score()` function in `graders.py` which is called by all grading functions.
 
-The `openenv.yaml` declares `reward_range: [0.01, 0.99]` to match.
+The `openenv.yaml` declares `reward_range: [0.02, 0.98]` to match.
 
 ---
 
@@ -385,13 +385,15 @@ esports-env/
 ## Changelog
 
 ### v3.2 (Current)
-- **CRITICAL FIX**: Changed reward format from 4 decimal places to exactly 2 decimal places (0.01 to 0.99)
-- Updated `clamp_score()` function to enforce 2-decimal precision with epsilon=0.01
+- **CRITICAL FIX**: Changed reward format from 4 decimal places to exactly 2 decimal places (0.02 to 0.98)
+- Updated `clamp_score()` function to enforce 2-decimal precision with tighter boundaries (0.02-0.98)
 - Removed deterministic +0.001 offset that was producing 3-decimal values
 - Updated all STDOUT formatting to use `.2f` instead of `.4f` for rewards
-- Updated `openenv.yaml` reward_range to `[0.01, 0.99]`
+- Updated `openenv.yaml` reward_range to `[0.02, 0.98]`
+- Updated `_clamp_reward_strict()` in `inference.py` to use 0.02/0.98 boundaries
 - Updated `/metadata` endpoint to reflect new reward range
-- All scores now guaranteed to be exactly 2 decimal places between 0.01 and 0.99
+- All scores now guaranteed to be exactly 2 decimal places between 0.02 and 0.98
+- Tighter boundaries provide clearer separation from 0.0 and 1.0
 
 ### v3.1
 - Added `/metadata`, `/schema`, and `/mcp` endpoints required by OpenEnv HTTP/1.x standard

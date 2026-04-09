@@ -11,7 +11,8 @@ def clamp_score(score: float, min_val: float = 0.0, max_val: float = 1.0, epsilo
     """
     Clamp score to be strictly within the open interval (min_val, max_val).
     
-    Forces all scores to exactly 2 decimal places between 0.01 and 0.99.
+    Forces all scores to exactly 2 decimal places between 0.02 and 0.98.
+    Provides clear separation from 0.0 and 1.0 boundaries.
     
     Args:
         score: The score to clamp
@@ -20,15 +21,15 @@ def clamp_score(score: float, min_val: float = 0.0, max_val: float = 1.0, epsilo
         epsilon: Minimum distance from boundaries (default 0.01)
     
     Returns:
-        Score guaranteed to satisfy: 0.01 <= score <= 0.99
+        Score guaranteed to satisfy: 0.02 <= score <= 0.98
         Always rounded to exactly 2 decimal places
     """
     # Round to exactly 2 decimal places first
     score = round(score, 2)
     
-    # Enforce strict boundaries: must be between 0.01 and 0.99
-    safe_min = min_val + epsilon  # 0.01
-    safe_max = max_val - epsilon  # 0.99
+    # Enforce strict boundaries with tighter range: 0.02 to 0.98
+    safe_min = 0.02  # Tighter minimum (was 0.01)
+    safe_max = 0.98  # Tighter maximum (was 0.99)
     
     # Clamp to safe range
     if score <= safe_min:

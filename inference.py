@@ -255,6 +255,36 @@ Respond with ONLY a valid JSON object containing the action. No explanations or 
             print(f"Raw LLM output: {action_text}")
             return {}
     
+    def _clamp_reward_strict(self, reward: float) -> float:
+        """
+        Clamp reward to strictly within open interval (0, 1).
+        Ensures reward is NEVER exactly 0.0 or 1.0.
+        
+        Args:
+            reward: Raw reward value
+            
+        Returns:
+            Reward strictly within (0, 1) with 2 decimal places
+        """
+        # Round to 2 decimal places first
+        reward = round(reward, 2)
+        
+        # Enforce strict open interval (0, 1) - NOT [0, 1]
+        # Tighter boundaries for clearer separation from 0.0 and 1.0
+        min_val = 0.02  # Minimum allowed value (strictly > 0.0)
+        max_val = 0.98  # Maximum allowed value (strictly < 1.0)
+        
+        if reward <= 0.0:
+            return min_val
+        elif reward >= 1.0:
+            return max_val
+        elif reward == 0.0:  # Exact 0.0
+            return min_val
+        elif reward == 1.0:  # Exact 1.0
+            return max_val
+        else:
+            return reward
+    
     def run_task(self, task_id: str) -> None:
         """Run a complete task episode with strict STDOUT formatting."""
         # Line 1: [START] task=<task_id> env=esports_env model=<model_name>
@@ -284,8 +314,11 @@ Respond with ONLY a valid JSON object containing the action. No explanations or 
                     step_response = self.step_environment(action)
                     observation = step_response["observation"]
                     reward = float(step_response["reward"])
-                    # Server already ensures scores are strictly within (0, 1)
-                    # No client-side clamping needed
+                    
+                    # CRITICAL: Apply strict boundary filter to ensure reward is in open interval (0, 1)
+                    # This prevents 0.0 and 1.0 from appearing in logs
+                    reward = self._clamp_reward_strict(reward)
+                    
                     done = step_response["done"]
                     
                     rewards.append(reward)
@@ -310,21 +343,26 @@ Respond with ONLY a valid JSON object containing the action. No explanations or 
                     # LLM or environment error - log error and exit episode
                     action_json_str = json.dumps({}, separators=(',', ':'))
                     error_msg = str(e).replace('\n', ' ').replace('\r', ' ')
-                    print(f"[STEP] step={step} action={action_json_str} reward=0.01 done=true error={error_msg}")
-                    rewards.append(0.01)
+                    # Use strict clamping for error fallback
+                    error_reward = self._clamp_reward_strict(0.01)
+                    print(f"[STEP] step={step} action={action_json_str} reward={error_reward:.2f} done=true error={error_msg}")
+                    rewards.append(error_reward)
                     success = False
                     break
             
             # Line 3: [END] success=<true|false> steps=<n> rewards=<r1,r2,...,rn>
             success_str = "true" if success else "false"
-            rewards_str = ",".join([f"{r:.2f}" for r in rewards])
+            # Apply strict clamping to all rewards in the final output
+            clamped_rewards = [self._clamp_reward_strict(r) for r in rewards]
+            rewards_str = ",".join([f"{r:.2f}" for r in clamped_rewards])
             print(f"[END] success={success_str} steps={len(rewards)} rewards={rewards_str}")
             
         except Exception as e:
             # Handle reset or other initialization errors
             error_msg = str(e).replace('\n', ' ').replace('\r', ' ')
-            print(f"[STEP] step=1 action={{}} reward=0.01 done=true error={error_msg}")
-            print(f"[END] success=false steps=1 rewards=0.01")
+            error_reward = self._clamp_reward_strict(0.01)
+            print(f"[STEP] step=1 action={{}} reward={error_reward:.2f} done=true error={error_msg}")
+            print(f"[END] success=false steps=1 rewards={error_reward:.2f}")
     
     def run_all_tasks(self):
         """Run all three tasks with strict STDOUT formatting."""
@@ -332,9 +370,10 @@ Respond with ONLY a valid JSON object containing the action. No explanations or 
             # Print valid STDOUT even on health failure so validator can parse it
             tasks = ["task_easy_bracket", "task_medium_conflict", "task_hard_dropout"]
             for task_id in tasks:
+                error_reward = self._clamp_reward_strict(0.01)
                 print(f"[START] task={task_id} env=esports_env model={self.model_name}")
-                print(f"[STEP] step=1 action={{}} reward=0.01 done=true error=environment_not_ready")
-                print(f"[END] success=false steps=1 rewards=0.01")
+                print(f"[STEP] step=1 action={{}} reward={error_reward:.2f} done=true error=environment_not_ready")
+                print(f"[END] success=false steps=1 rewards={error_reward:.2f}")
             return
 
         tasks = ["task_easy_bracket", "task_medium_conflict", "task_hard_dropout"]
