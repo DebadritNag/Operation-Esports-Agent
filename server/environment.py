@@ -287,7 +287,7 @@ class TournamentEnvironment:
             raw = 0.01
 
         # Guarantee score is strictly within (0, 1) — validator requirement
-        return max(0.001, min(raw, 0.999))
+        return clamp_score(raw, 0, 1)
 
     def _grade_medium_dynamic(self, action: Action) -> float:
         """Grade medium task against randomized targets with nuanced scoring."""
